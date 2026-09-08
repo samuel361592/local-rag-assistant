@@ -319,3 +319,22 @@ def test_stream_checks_cancellation_immediately_after_rerank() -> None:
 
     with pytest.raises(RagAnswerCancelled):
         service.answer_stream("問題", cancel_event=cancel_event)
+
+
+def test_excel_rerank_progress_and_answer_share_location():
+    document = Document(page_content="第 2 列｜產品：A", metadata={
+        "source_filename": "sales.xlsx", "source_type": "excel",
+        "sheet_name": "Sales", "row_start": 2, "row_end": 2,
+    })
+    chat = FakeChatModel()
+    events = []
+    service = RagService(
+        FakeVectorStore([document]), Settings(top_k=1, retrieval_top_k=1),
+        chat_model=chat, reranker=FakeReranker(0.9),
+    )
+    result = service.answer("產品 A", progress_callback=events.append)
+    label = "工作表「Sales」，第 2 列"
+    assert result.sources[0].location_label == label
+    assert result.sources[0].page_number is None
+    assert label in next(event.detail for event in events if event.stage == "reranked")
+    assert label in chat.invocations[0][1][1]

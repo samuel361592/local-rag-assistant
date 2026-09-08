@@ -1,6 +1,6 @@
 # 本機 RAG 問答助手
 
-這是一個使用 Streamlit、Ollama 與 FAISS 製作的本機 RAG 學習專案。使用者可上傳一份或多份 PDF／PNG／JPG；系統會保留原生文字與 OCR，並可選擇使用 VLM 建立獨立的視覺描述 Chunk，再依檢索內容回答問題並標示來源檔名、頁碼與內容類型。
+這是一個使用 Streamlit、Ollama 與 FAISS 製作的本機 RAG 學習專案。使用者可混合上傳 PDF／PNG／JPG／JPEG／XLSX；系統保留原生文字、OCR 與選配 VLM 描述，Excel 則直接解析儲存格。回答提供檔名與來源位置：PDF 頁碼、Excel 工作表及實際列號、圖片位置標籤。
 
 > 本專案僅供學習與資訊整理，不構成法律或合規建議。請勿上傳機密、個人資料或其他不應交由本機模型處理的內容。
 
@@ -10,6 +10,7 @@
 - Streamlit：建立本機 Web 操作介面，提供 PDF 上傳、知識庫建立、文件問答與 Chunk 預覽。
 - LangChain：整合 RAG 流程中的文件載入、文字切分、Embedding、向量庫與聊天模型呼叫。
 - PyPDFLoader：解析 PDF，將 PDF 頁面轉成 LangChain `Document`。
+- openpyxl：唯讀解析 XLSX，以雙 Workbook 取得公式快取與公式存在狀態。
 - PyMuPDF：將需要 OCR 的 PDF 頁面轉成圖片。
 - PaddleOCR：辨識掃描型 PDF 頁面與 PNG/JPG 圖片中的中文、英文及數字。
 - RecursiveCharacterTextSplitter：將長文本依段落、換行與中文標點切成適合檢索的 Chunks。
@@ -32,6 +33,7 @@ PDF / PNG / JPG 上傳
   └─ 頁面圖片／上傳圖片 → qwen3-vl:4b → Visual Chunks
   ↓
 RecursiveCharacterTextSplitter 分別切分 Text／Visual Chunk
+  + XLSX → openpyxl → 表頭與完整資料列 → Excel Row Packer
   ↓
 bge-m3 產生 Embedding
   ↓
@@ -60,6 +62,68 @@ qwen3:4b 根據 Context 產生回答
 Embedding 與 Reranker 的用途不同：Embedding 將問題與 Chunk 轉成向量，讓 FAISS 快速找出候選集合；Reranker 直接比較問題與候選文字，進行較精細但較耗時的第二階段排序。Reranker 由 Python 的 FlagEmbedding 載入 Hugging Face 模型，不透過 Ollama。
 
 索引只存在目前的 Streamlit 工作階段，重新啟動應用程式後需重新上傳並建立知識庫。本版不會載入或寫出 FAISS pickle 檔案。
+
+## Excel XLSX 支援（v2.3）
+
+Excel 不經 OCR／VLM，不使用一般文字切分器或 overlap。第一個含正規化後有效值的列
+作為表頭；空白、重複與碰撞欄名自動補名，表頭範圍外的新欄位也不會遺失。
+每個欄號的名稱配置後固定。隱藏工作表仍會索引；空白列與沒有資料列的工作表略過。
+合併儲存格只讀左上角，不向下或向右填滿。
+
+文字、數字、日期、時間、布林及錯誤值會格式化為文字。公式只讀上次儲存的快取結果；
+無快取時輸出「無可用計算值（公式儲存格 A2）」之類的標記，不重新計算或更新外部連結。
+無快取公式統計包含表頭前、表頭、資料區及隱藏工作表，每格計一次。
+
+資料列保留實際 Excel 列號，例如：
+
+```text
+工作表：Sales
+
+第 2 列｜產品：A｜營收：20
+```
+
+Row Packer 合併相鄰有效列至 `min(CHUNK_SIZE, EXCEL_MAX_CHUNK_CHARS)`，
+不跨工作表或檔案、不拆單列。超過 CHUNK_SIZE 的單列可獨立成為 oversized Chunk，
+但 RowRecord 與包含工作表前綴的 Chunk 都必須符合以下硬上限：
+
+| 設定 | 預設值 | 定義 |
+| --- | ---: | --- |
+| `EXCEL_MAX_FILE_SIZE_MB` | 20 | 每份 XLSX 大小，每 MB 採 1024×1024 bytes |
+| `EXCEL_MAX_SHEETS` | 30 | 每份活頁簿的工作表總數，包含空白及隱藏工作表 |
+| `EXCEL_MAX_ROW_INDEX` | 50000 | 最大實際列座標，含表頭及只有格式的儲存格 |
+| `EXCEL_MAX_COLUMN_INDEX` | 200 | 最大實際欄座標，含只有格式的儲存格 |
+| `EXCEL_MAX_CELL_CHARS` | 3000 | 正規化後欄名與資料值各自獨立的字元上限 |
+| `EXCEL_MAX_ROW_CHARS` | 4000 | 完整資料列，包含列號、欄名、值及分隔符 |
+| `EXCEL_MAX_CHUNK_CHARS` | 4096 | 最終 Chunk，包含工作表前綴與換行 |
+
+設定全部必須大於 0，且 `EXCEL_MAX_ROW_CHARS + 37 <= EXCEL_MAX_CHUNK_CHARS`。
+工作表名稱超過 31 字元時拒絕解析。字元限制以 Python `len(text)` 驗收，不等於模型
+Token 容量保證；模型端仍可能截斷內容。
+
+任何檔案解析或限制檢查失敗都停止整批建庫，不截斷內容或建立部分索引。
+同批次檔名經大小寫正規化後重複也會拒絕。工作表／活頁簿編輯保護可唯讀解析，
+但不支援需要開啟密碼的加密活頁簿、XLS、XLSM、圖表圖片解析、多層表頭辨識或同表自動分區。
+
+Chunk 預覽支援檔案、來源類型、位置、工作表與關鍵字篩選；工作表選單綁定檔案，
+選擇全部檔案時停用。篩選只影響預覽。UI 分別加總 Excel 工作簿、全部／已索引／略過
+工作表、有效資料列與無快取公式數；Excel 不混入 PDF／圖片頁數。
+
+重新建庫成功後才替換知識庫，並清除舊問答、檢索紀錄及預覽篩選。失敗時保留舊索引
+與畫面，顯示目前仍生效的檔案。第一版適用於查找產品、案件與資料列；不保證全表
+加總、平均與排序等統計分析結果。既有 PDF Retrieval Evaluation 與 cache 格式不變。
+
+### Excel 驗證
+
+```powershell
+.venv\Scripts\python.exe -m pytest
+.venv\Scripts\python.exe -m compileall app.py src tests scripts
+```
+
+測試涵蓋解析、合成公式快取、邊界、混合來源及 Streamlit 建庫成功／失敗狀態；
+不下載或載入真實模型。人工驗證檔與生成方式見
+[Excel fixture 說明](tests/fixtures/excel/README.md)。
+目前缺少由 Excel／LibreOffice 儲存的 `formula_cached.xlsx`，該項測試會明確 skip；
+合成快取測試不替代真實應用程式快取驗收。實際模型問答仍須以本機 Ollama 完成人工驗證。
 
 ## 專案結構
 

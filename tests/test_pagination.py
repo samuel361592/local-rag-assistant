@@ -140,3 +140,16 @@ def test_friendly_error_distinguishes_reranker_failures(
 
 def test_ocr_preview_text_key_changes_with_source() -> None:
     assert ocr_preview_text_key("page-1.png") != ocr_preview_text_key("page-2.png")
+
+
+def test_excel_filters_preserve_original_indices():
+    from src.rag.source_location import build_location_label
+    chunks = [Document(page_content="營收", metadata={
+        "source_filename": filename, "source_type": "excel", "sheet_name": "Sales",
+        "row_start": 2, "row_end": 3,
+    }) for filename in ("a.xlsx", "b.xlsx")]
+    assert filter_chunks(
+        chunks, filename="b.xlsx", source_type="excel", sheet_name="Sales",
+        location_label=build_location_label(chunks[1].metadata), keyword="營收",
+    ) == [(2, chunks[1])]
+    assert filter_chunks(chunks, source_type="pdf") == []

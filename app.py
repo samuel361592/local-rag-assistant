@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 from dataclasses import dataclass, field, replace
 from math import ceil
 from queue import Empty, Queue
@@ -20,12 +21,12 @@ from src.rag.document_loader import (
     OCR_CONFIDENCE_KEY,
     OCR_EXTRACTION_METHOD,
     PAGE_NUMBER_KEY,
-    PDFProcessingError,
+    DocumentProcessingError,
     SOURCE_FILENAME_KEY,
     TEXT_EXTRACTION_METHOD_KEY,
     VISUAL_CONTENT_TYPE,
     VLM_EXTRACTION_METHOD,
-    process_uploaded_pdfs,
+    process_uploaded_documents,
 )
 from src.rag.rag_service import (
     RagAnswerCancelled,
@@ -42,6 +43,8 @@ from src.rag.reranker import (
     RerankerModelNotFoundError,
 )
 from src.rag.vector_store import create_vector_store
+from src.rag.source_location import build_location_label
+from src.rag.knowledge_state import commit_knowledge_base
 
 
 ACTIVE_JOB_STATUSES = frozenset({"running", "cancelling"})
@@ -157,7 +160,7 @@ def drain_rag_job_updates(job: RagAnswerJob) -> bool:
 def friendly_error(error: Exception) -> str:
     message = str(error)
     lowered = message.lower()
-    if isinstance(error, PDFProcessingError):
+    if isinstance(error, DocumentProcessingError):
         return message
     if isinstance(error, RerankerDependencyError):
         return "未安裝 FlagEmbedding。請先執行 pip install -r requirements.txt。"
@@ -219,8 +222,12 @@ def filter_chunks(
     filename: str | None = None,
     page_number: object | None = None,
     keyword: str = "",
+    *,
+    source_type: str | None = None,
+    location_label: str | None = None,
+    sheet_name: str | None = None,
 ) -> list[tuple[int, Document]]:
-    """依來源、頁碼及關鍵字篩選，並保留 Chunk 的原始編號。"""
+    """依檔案、來源位置、工作表與關鍵字篩選，保留原始 Chunk 編號。"""
 
     clean_keyword = keyword.strip().casefold()
     matches: list[tuple[int, Document]] = []
@@ -229,6 +236,12 @@ def filter_chunks(
         if filename is not None and metadata.get(SOURCE_FILENAME_KEY) != filename:
             continue
         if page_number is not None and metadata.get(PAGE_NUMBER_KEY) != page_number:
+            continue
+        if source_type is not None and metadata.get("source_type", "pdf") != source_type:
+            continue
+        if location_label is not None and build_location_label(metadata) != location_label:
+            continue
+        if sheet_name is not None and metadata.get("sheet_name") != sheet_name:
             continue
         if clean_keyword and clean_keyword not in chunk.page_content.casefold():
             continue
@@ -279,7 +292,7 @@ def render_chunk_preview(chunks: Sequence[Document]) -> None:
     )
 
     pages_for_file = {
-        chunk.metadata.get(PAGE_NUMBER_KEY, "未知")
+        build_location_label(chunk.metadata)
         for chunk in chunks
         if selected_filename == "全部"
         or chunk.metadata.get(SOURCE_FILENAME_KEY) == selected_filename
@@ -288,15 +301,16 @@ def render_chunk_preview(chunks: Sequence[Document]) -> None:
         "全部",
         *sorted(
             pages_for_file,
-            key=lambda value: (
-                (0, int(value)) if str(value).isdigit() else (1, str(value))
+            key=lambda value: tuple(
+                (0, int(part)) if part.isdigit() else (1, part)
+                for part in re.split(r"(\d+)", value)
             ),
         ),
     )
     if st.session_state.get("chunk_preview_page_filter") not in page_options:
         st.session_state["chunk_preview_page_filter"] = "全部"
     selected_page = page_column.selectbox(
-        "頁碼",
+        "位置",
         options=page_options,
         key="chunk_preview_page_filter",
         on_change=reset_chunk_preview_page,
@@ -308,10 +322,30 @@ def render_chunk_preview(chunks: Sequence[Document]) -> None:
         on_change=reset_chunk_preview_page,
     )
 
+    type_column, sheet_column = st.columns(2)
+    type_labels = {"全部": None, "PDF": "pdf", "圖片": "image", "Excel": "excel"}
+    selected_type = type_column.selectbox(
+        "來源類型", options=tuple(type_labels), key="chunk_preview_source_type",
+        on_change=reset_chunk_preview_page,
+    )
+    sheets = sorted({
+        str(chunk.metadata["sheet_name"]) for chunk in chunks
+        if chunk.metadata.get("source_type") == "excel"
+        and chunk.metadata.get(SOURCE_FILENAME_KEY) == selected_filename
+    })
+    sheet_options = ("全部", *sheets)
+    if st.session_state.get("chunk_preview_sheet") not in sheet_options:
+        st.session_state["chunk_preview_sheet"] = "全部"
+    selected_sheet = sheet_column.selectbox(
+        "Excel 工作表", options=sheet_options, key="chunk_preview_sheet",
+        disabled=not sheets, on_change=reset_chunk_preview_page,
+    )
     filtered_chunks = filter_chunks(
         chunks,
         filename=None if selected_filename == "全部" else selected_filename,
-        page_number=None if selected_page == "全部" else selected_page,
+        location_label=None if selected_page == "全部" else selected_page,
+        source_type=type_labels[selected_type],
+        sheet_name=None if selected_sheet == "全部" else selected_sheet,
         keyword=keyword,
     )
     if len(filtered_chunks) != len(chunks):
@@ -371,17 +405,19 @@ def render_chunk_preview(chunks: Sequence[Document]) -> None:
     st.caption(f"顯示第 {start + 1}–{end} 筆")
     for original_index, chunk in filtered_chunks[start:end]:
         filename = chunk.metadata.get(SOURCE_FILENAME_KEY, "未知檔案")
-        page_number = chunk.metadata.get(PAGE_NUMBER_KEY, "未知")
+        location_label = build_location_label(chunk.metadata)
         method = chunk.metadata.get(TEXT_EXTRACTION_METHOD_KEY, "unknown")
         content_type = chunk.metadata.get(CONTENT_TYPE_KEY)
         if content_type == VISUAL_CONTENT_TYPE or method == VLM_EXTRACTION_METHOD:
             method_label = "VLM 視覺分析"
         else:
             method_label = "OCR" if method == OCR_EXTRACTION_METHOD else "文字擷取"
+        if chunk.metadata.get("source_type") == "excel":
+            method_label = "Excel"
         content = chunk.page_content.strip()
         short_filename = shorten_filename(filename)
         title = (
-            f"Chunk #{original_index}　·　第 {page_number} 頁　·　"
+            f"Chunk #{original_index}　·　{location_label}　·　"
             f"{method_label}　·　{len(content):,} 字　·　{short_filename}"
         )
         with st.expander(title):
@@ -500,7 +536,7 @@ def render_result(result: RagResult) -> None:
         for source in result.sources:
             st.markdown(
                 f"- [來源 {source.number}｜{source.content_type_label}] "
-                f"{source.filename}，第 {source.page_number} 頁"
+                f"{source.filename}，{source.location_label}"
             )
 
     with st.expander("查看實際檢索到的原始文字區塊"):
@@ -509,7 +545,7 @@ def render_result(result: RagResult) -> None:
         for source, chunk in zip(result.sources, result.chunks, strict=True):
             st.markdown(
                 f"**[來源 {source.number}｜{source.content_type_label}] "
-                f"{source.filename}｜第 {source.page_number} 頁**"
+                f"{source.filename}｜{source.location_label}**"
             )
             st.text(chunk.page_content.strip())
 
@@ -619,7 +655,7 @@ def main() -> None:
     st.set_page_config(page_title="本機 RAG 問答助手", page_icon="📚", layout="wide")
     st.title("本機 RAG 問答助手")
     st.write(
-        "上傳公開的 PDF 或圖片文件，建立暫存於本次工作階段的知識庫，"
+        "上傳公開的 PDF、圖片或 Excel 文件，建立暫存於本次工作階段的知識庫，"
         "並依文件內容進行問答。"
     )
     st.caption("本工具僅供資訊整理與學習，不構成法律或合規建議。")
@@ -633,8 +669,8 @@ def main() -> None:
     settings = render_vlm_controls(settings)
 
     uploaded_files = st.file_uploader(
-        "上傳一份或多份 PDF 或圖片文件（PNG / JPG）",
-        type=["pdf", "png", "jpg", "jpeg"],
+        "上傳一份或多份 PDF、圖片或 Excel 文件（PNG / JPG / XLSX）",
+        type=["pdf", "png", "jpg", "jpeg", "xlsx"],
         accept_multiple_files=True,
     )
 
@@ -645,59 +681,38 @@ def main() -> None:
         disabled=is_job_active(current_job),
     ):
         if not uploaded_files:
-            st.warning("尚未上傳 PDF 或圖片文件，請先選擇至少一份檔案。")
+            st.warning("尚未上傳文件，請先選擇至少一份檔案。")
         else:
+            build_failed = False
             try:
                 with st.spinner(
-                    "正在解析 PDF 或圖片文件、切分文字並建立向量索引……"
+                    "正在解析文件、建立文字區塊並建立向量索引……"
                 ):
-                    batch = process_uploaded_pdfs(uploaded_files, settings)
+                    batch = process_uploaded_documents(uploaded_files, settings)
                     vector_store = create_vector_store(batch.chunks, settings)
-                st.session_state["vector_store"] = vector_store
-                st.session_state["knowledge_stats"] = {
-                    "documents": batch.document_count,
-                    "pages": batch.page_count,
-                    "chunks": len(batch.chunks),
-                    "native_pages": batch.extraction_stats.native_page_count,
-                    "ocr_pages": batch.extraction_stats.ocr_page_count,
-                    "image_pages": batch.extraction_stats.image_page_count,
-                    "average_ocr_confidence": (
-                        batch.extraction_stats.average_ocr_confidence
-                    ),
-                    "vlm_pages": batch.extraction_stats.vlm_page_count,
-                    "vlm_failures": batch.extraction_stats.vlm_failure_count,
-                    "visual_chunks": batch.extraction_stats.visual_chunk_count,
-                    "vlm_model": settings.vlm_model,
-                }
-                st.session_state["knowledge_chunks"] = batch.chunks
-                st.session_state["ocr_text_by_source"] = batch.ocr_text_by_source
-                st.session_state["visual_text_by_source"] = batch.visual_text_by_source
-                st.session_state["vlm_failures_by_source"] = batch.vlm_failures_by_source
-                st.session_state["chunk_preview_page"] = 1
-                for preview_key in (
-                    "chunk_preview_filename",
-                    "chunk_preview_page_filter",
-                    "chunk_preview_search",
-                    "ocr_preview_source",
-                    "vlm_preview_source",
-                ):
-                    st.session_state.pop(preview_key, None)
-                st.session_state.pop("rag_result", None)
-                st.session_state.pop("rag_progress_events", None)
-                st.session_state.pop("rag_job", None)
+                commit_knowledge_base(
+                    st.session_state, batch, vector_store,
+                    [file.name for file in uploaded_files], settings,
+                )
                 st.success("知識庫建立完成。")
-            except PDFProcessingError as exc:
-                LOGGER.warning("Knowledge base creation failed.", exc_info=True)
+            except DocumentProcessingError as exc:
+                build_failed = True
+                LOGGER.warning("Knowledge base creation failed: %s", exc)
                 st.error(friendly_error(exc))
             except Exception as exc:
+                build_failed = True
                 LOGGER.exception("Knowledge base creation failed unexpectedly.")
                 st.error(friendly_error(exc))
+            if build_failed and "vector_store" in st.session_state:
+                st.info("目前仍使用上一版知識庫。")
 
+    if st.session_state.get("active_knowledge_files"):
+        st.caption("目前生效檔案：" + "、".join(st.session_state["active_knowledge_files"]))
     stats = st.session_state.get("knowledge_stats")
     if stats:
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("文件數量", stats["documents"])
-        col2.metric("頁數", stats["pages"])
+        col2.metric("PDF／圖片頁數", stats["pages"])
         col3.metric("Chunk 數量", stats["chunks"])
         col4.metric("文字擷取頁", stats["native_pages"])
         col5, col6, col7, col8 = st.columns(4)
@@ -705,6 +720,17 @@ def main() -> None:
         col6.metric("VLM 分析頁", stats.get("vlm_pages", 0))
         col7.metric("VLM 失敗頁", stats.get("vlm_failures", 0))
         col8.metric("Visual Chunks", stats.get("visual_chunks", 0))
+        if stats.get("excel_workbook_count", 0):
+            columns = st.columns(3)
+            for index, (label, key) in enumerate((
+                ("Excel 工作簿數", "excel_workbook_count"),
+                ("Excel 工作表總數", "excel_total_sheet_count"),
+                ("Excel 已索引工作表", "excel_indexed_sheet_count"),
+                ("Excel 略過空白工作表", "excel_skipped_empty_sheet_count"),
+                ("Excel 有效資料列", "excel_indexed_row_count"),
+                ("無快取公式數", "excel_formula_without_cache_count"),
+            )):
+                columns[index % 3].metric(label, stats[key])
         if stats.get("average_ocr_confidence") is not None:
             st.caption(f"OCR 平均信心分數：{stats['average_ocr_confidence']:.2%}")
 

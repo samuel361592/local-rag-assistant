@@ -14,6 +14,8 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from .config import Settings
+from .excel_loader import load_excel_documents
+from .processing_errors import DocumentProcessingError, PDFProcessingError
 from .image_renderer import (
     ImageRenderError,
     normalize_image,
@@ -58,10 +60,6 @@ VLM_EXTRACTION_METHOD = "vlm"
 LOGGER = logging.getLogger(__name__)
 
 
-class PDFProcessingError(RuntimeError):
-    """代表使用者可理解的文件處理錯誤。"""
-
-
 def _ocr_user_message(filename: str) -> str:
     return (
         f"無法完成「{filename}」的 OCR 辨識。請確認 OCR 相依套件已安裝、"
@@ -78,6 +76,12 @@ class DocumentExtractionStats:
     vlm_page_count: int = 0
     vlm_failure_count: int = 0
     visual_chunk_count: int = 0
+    excel_workbook_count: int = 0
+    excel_total_sheet_count: int = 0
+    excel_indexed_sheet_count: int = 0
+    excel_skipped_empty_sheet_count: int = 0
+    excel_indexed_row_count: int = 0
+    excel_formula_without_cache_count: int = 0
 
     @property
     def average_ocr_confidence(self) -> float | None:
@@ -477,16 +481,25 @@ def split_pdf_pages(pages: Sequence[Document], filename: str, settings: Settings
     return splitter.split_documents(normalized_pages)
 
 
-def process_uploaded_pdfs(
+def process_uploaded_documents(
     uploaded_files: Sequence[BinaryIO],
     settings: Settings,
     *,
     ocr_service: OCRService | None = None,
     vlm_service: VLMService | None = None,
 ) -> DocumentBatch:
-    """解析多份 PDF/圖片，建立文字與 Visual Chunks 並回傳統計。"""
+    """解析 PDF、圖片與 XLSX，彙整最終 Chunks 與批次統計。"""
 
-    if _vlm_active(settings) and vlm_service is None:
+    filenames = [Path(getattr(file, "name", "未命名.pdf")).name for file in uploaded_files]
+    seen: set[str] = set()
+    for filename in filenames:
+        if filename.casefold() in seen:
+            raise DocumentProcessingError(f"同批次檔名重複「{filename}」，請重新命名後上傳。")
+        seen.add(filename.casefold())
+        if Path(filename).suffix.lower() not in {".pdf", ".xlsx", *SUPPORTED_IMAGE_SUFFIXES}:
+            raise DocumentProcessingError(f"不支援「{filename}」；支援 PDF、PNG、JPG、JPEG、XLSX。")
+    needs_visual_service = any(Path(name).suffix.lower() != ".xlsx" for name in filenames)
+    if needs_visual_service and _vlm_active(settings) and vlm_service is None:
         try:
             vlm_service = VLMService(settings)
         except VLMError as exc:
@@ -501,9 +514,21 @@ def process_uploaded_pdfs(
     vlm_pages = vlm_failures = 0
     ocr_confidences: list[float] = []
 
-    for uploaded_file in uploaded_files:
-        filename = getattr(uploaded_file, "name", "未命名.pdf")
+    excel_totals = {name: 0 for name in (
+        "excel_workbook_count", "excel_total_sheet_count", "excel_indexed_sheet_count",
+        "excel_skipped_empty_sheet_count", "excel_indexed_row_count",
+        "excel_formula_without_cache_count",
+    )}
+
+    for uploaded_file, filename in zip(uploaded_files, filenames):
         suffix = Path(filename).suffix.lower()
+        if suffix == ".xlsx":
+            excel_chunks, excel_stats = load_excel_documents(uploaded_file, settings)
+            all_chunks.extend(excel_chunks)
+            parsed_text_by_source[filename] = "\n\n".join(chunk.page_content for chunk in excel_chunks)
+            for name in excel_totals:
+                excel_totals[name] += getattr(excel_stats, name.removeprefix("excel_"))
+            continue
         if suffix in SUPPORTED_IMAGE_SUFFIXES:
             loaded = _load_image_page(uploaded_file, settings, ocr_service, vlm_service)
         else:
@@ -546,6 +571,7 @@ def process_uploaded_pdfs(
         parsed_text_by_source=parsed_text_by_source,
         ocr_text_by_source=ocr_text_by_source,
         extraction_stats=DocumentExtractionStats(
+            **excel_totals,
             native_page_count=native_pages,
             ocr_page_count=ocr_pages,
             image_page_count=image_pages,
@@ -556,4 +582,14 @@ def process_uploaded_pdfs(
         ),
         visual_text_by_source=visual_text_by_source,
         vlm_failures_by_source=vlm_failures_by_source,
+    )
+
+
+def process_uploaded_pdfs(
+    uploaded_files: Sequence[BinaryIO], settings: Settings, *,
+    ocr_service: OCRService | None = None, vlm_service: VLMService | None = None,
+) -> DocumentBatch:
+    """Backward-compatible entry point for document processing."""
+    return process_uploaded_documents(
+        uploaded_files, settings, ocr_service=ocr_service, vlm_service=vlm_service,
     )

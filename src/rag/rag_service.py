@@ -10,6 +10,7 @@ from langchain_core.documents import Document
 from langchain_ollama import ChatOllama
 
 from .config import Settings
+from .source_location import build_location_label
 from .document_loader import (
     CONTENT_TYPE_KEY,
     PAGE_NUMBER_KEY,
@@ -25,8 +26,14 @@ from .vector_store import similarity_search
 class SourceReference:
     number: int
     filename: str
-    page_number: int | str
+    # Keep the original positional arguments compatible; new callers pass location_label.
+    page_number: int | str | None = None
     content_type: str = "text"
+    location_label: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.location_label:
+            object.__setattr__(self, "location_label", f"第 {self.page_number or '未知'} 頁")
 
     @property
     def content_type_label(self) -> str:
@@ -75,8 +82,10 @@ def _source_details(document: Document, number: int) -> SourceReference:
         or "未知檔案"
     )
     page_number = document.metadata.get(PAGE_NUMBER_KEY, "未知")
+    if document.metadata.get("source_type") == "excel":
+        page_number = None
     content_type = str(document.metadata.get(CONTENT_TYPE_KEY, "text"))
-    return SourceReference(number, filename, page_number, content_type)
+    return SourceReference(number, filename, page_number, content_type, build_location_label(document.metadata))
 
 
 def format_context(documents: Sequence[Document]) -> tuple[str, list[SourceReference]]:
@@ -88,7 +97,7 @@ def format_context(documents: Sequence[Document]) -> tuple[str, list[SourceRefer
         sections.append(
             f"[來源 {number}]\n"
             f"檔名：{source.filename}\n"
-            f"頁碼：{source.page_number}\n"
+            f"位置：{source.location_label}\n"
             f"內容類型：{source.context_content_type_label}\n"
             f"內容：{document.page_content.strip()}"
         )
@@ -203,7 +212,7 @@ class RagService:
         ]
         detail = "\n".join(
             f"[來源 {source.number}｜{source.content_type_label}] "
-            f"{source.filename}，第 {source.page_number} 頁"
+            f"{source.filename}，{source.location_label}"
             for source in sources
         )
         _emit_progress(

@@ -61,7 +61,7 @@ def test_context_contains_source_number_filename_and_page() -> None:
 
     assert "[來源 1]" in context
     assert "參考指引.pdf" in context
-    assert "頁碼：7" in context
+    assert "位置：第 7 頁" in context
     assert sources[0].filename == "參考指引.pdf"
 
 
@@ -79,6 +79,21 @@ def test_context_and_source_mark_visual_content_type() -> None:
 
     assert "內容類型：VLM 視覺分析" in context
     assert sources[0].content_type_label == "視覺分析"
+
+
+def test_mixed_source_locations():
+    documents = [
+        Document(page_content="pdf", metadata={"source_filename": "manual.pdf", "page_number": 3}),
+        Document(page_content="row", metadata={"source_filename": "sales.xlsx", "source_type": "excel", "sheet_name": "Sales", "row_start": 2, "row_end": 8}),
+        Document(page_content="image", metadata={"source_filename": "image.png", "source_type": "image", "page_number": 1}),
+    ]
+    context, sources = format_context(documents)
+    assert "位置：第 3 頁" in context
+    assert "位置：工作表「Sales」，第 2–8 列" in context
+    assert "位置：圖片" in context
+    assert "頁碼：" not in context
+    assert sources[1].page_number is None
+    assert sources[2].location_label == "圖片"
 
 
 def test_no_results_returns_fixed_insufficient_information_message() -> None:

@@ -36,8 +36,24 @@ class Settings:
     vlm_max_image_edge: int = 1600
     vlm_timeout_seconds: int = 120
     vlm_num_predict: int = 800
+    excel_max_file_size_mb: int = 20
+    excel_max_sheets: int = 30
+    excel_max_row_index: int = 50_000
+    excel_max_column_index: int = 200
+    excel_max_cell_chars: int = 3_000
+    excel_max_row_chars: int = 4_000
+    excel_max_chunk_chars: int = 4_096
 
     def __post_init__(self) -> None:
+        for name in (
+            "excel_max_file_size_mb", "excel_max_sheets", "excel_max_row_index",
+            "excel_max_column_index", "excel_max_cell_chars", "excel_max_row_chars",
+            "excel_max_chunk_chars",
+        ):
+            if getattr(self, name) <= 0:
+                raise ValueError(f"{name.upper()} 必須大於 0。")
+        if self.excel_max_row_chars + 37 > self.excel_max_chunk_chars:
+            raise ValueError("EXCEL_MAX_ROW_CHARS + 37 必須小於或等於 EXCEL_MAX_CHUNK_CHARS。")
         if self.chunk_size <= 0:
             raise ValueError("CHUNK_SIZE 必須大於 0。")
         if self.chunk_overlap < 0:
@@ -103,6 +119,14 @@ def load_settings(
     )
     defaults = Settings()
     return Settings(
+        **{
+            name: _read_int(name.upper(), getattr(defaults, name))
+            for name in (
+                "excel_max_file_size_mb", "excel_max_sheets", "excel_max_row_index",
+                "excel_max_column_index", "excel_max_cell_chars", "excel_max_row_chars",
+                "excel_max_chunk_chars",
+            )
+        },
         ollama_base_url=os.getenv("OLLAMA_BASE_URL", defaults.ollama_base_url),
         embedding_model=os.getenv("EMBEDDING_MODEL", defaults.embedding_model),
         chat_model=os.getenv("CHAT_MODEL", defaults.chat_model),
