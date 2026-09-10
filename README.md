@@ -363,3 +363,46 @@ Reranker 設定不會加入 FAISS cache key，因為它不改變 PDF、Chunk、E
 - PDF 沒有文字：確認 `OCR_MODE` 不是 `disabled`，且已安裝 PaddleOCR 與 PaddlePaddle。
 - PDF 解壓縮錯誤：若看到 `Error -3 while decompressing data: invalid code lengths set`，通常代表 PDF 內部壓縮資料不標準或部分損毀。可先確認是否仍能建立知識庫；若無法解析，請用瀏覽器或 PDF 閱讀器開啟後「列印成 PDF」重新輸出一份再上傳。
 - 回答不正確：展開「實際檢索到的原始文字區塊」，先確認檢索結果是否包含答案，再調整 Chunk 或問題用詞。
+# Hybrid Retrieval（v1.6.2）
+
+新增可選的 BM25＋RRF 檢索流程：原始問題先經 BGE-M3／FAISS 語意檢索，
+再經 BM25 中文與識別字檢索，融合排名後交給既有 Reranker。
+Context 使用 `TOP_K`，預設 8；正式評測排名深度固定為 20。
+
+```env
+HYBRID_SEARCH_ENABLED=false
+BM25_TOP_K=20
+FUSION_TOP_K=30
+RRF_K=60
+BM25_K1=1.5
+BM25_B=0.75
+BM25_EPSILON=0.25
+```
+
+安裝 `requirements.txt` 後，可明確將 `.env` 的 `HYBRID_SEARCH_ENABLED` 改為 `true` 試用。
+每次切換開關或修改 BM25 建庫參數，都須重啟並重新上傳建庫。
+未取得有效 Acceptance 前，發布預設保持 `false`；手動啟用不代表品質已驗收。
+
+來源與 Chunk 使用 SHA-256 身分，所有索引共用固定建庫順序。
+同批次重複檔名或完全相同檔案內容會被拒絕。新庫完整建立成功才替換舊庫，
+成功時清除舊問答與來源選取，失敗時保留舊庫和聊天。
+BM25 沒有有效詞彙時允許建庫並顯示警告。正式查詢的可恢復元件錯誤會提示降級；
+資料一致性與模型完整性錯誤一律中止。
+
+固定資料位於 `evaluation/dataset.hybrid-v1.json`，包含兩份 NIST PDF 與合成 Excel，
+共 50 題。執行四組比較、一次暖機及五次 Trial：
+
+```powershell
+.venv/Scripts/python.exe -B scripts/evaluate_retrieval.py --hybrid --run-purpose tuning --cache-root C:/Users/dsc/.cache
+```
+
+`acceptance` 使用相同命令，但必須在已提交且乾淨的 checkout、Repository 外的隔離 Python
+環境執行，且實際依賴完全符合 Config 指定的環境 Manifest。模型、FAISS 衍生快取放在外部
+cache root；評測不快取問題 Embedding 或各次 Trial 排名。結果存於
+`evaluation/results/<dataset_version>/<config_id>/<run_id>.json`，不得覆寫。
+
+品質 Gate 採精確分數，檢查整體非劣、精確識別字收益、語意退化限制與五次排名一致性。
+BM25＋RRF P95 100 ms 是警示預算。只有通過且證明收益的 Acceptance 才可產生發布 Manifest
+並以 Promotion commit 啟用預設；`--check-release` 可驗證既有發布 Manifest。
+
+完整實作契約見 [Hybrid 規格](docs/hybrid-retrieval-spec-v1.6.2.md)。

@@ -95,7 +95,7 @@ def _run_rag_job(
     """在背景執行問答；此函式不得呼叫任何 Streamlit API。"""
 
     try:
-        service = RagService(vector_store, settings)
+        service = RagService(vector_store, settings, bm25_store=bm25_store, chunk_registry=chunk_registry)
         result = service.answer_stream(
             job.question,
             cancel_event=job.cancel_event,
@@ -116,11 +116,12 @@ def start_rag_job(
     question: str,
     vector_store: Any,
     settings: Settings,
+    bm25_store=None, chunk_registry=None,
 ) -> RagAnswerJob:
     job = RagAnswerJob(job_id=uuid4().hex, question=question.strip())
     job.thread = Thread(
         target=_run_rag_job,
-        args=(job, vector_store, settings),
+        args=(job, vector_store, settings, bm25_store, chunk_registry),
         daemon=True,
         name=f"rag-answer-{job.job_id[:8]}",
     )
@@ -158,6 +159,7 @@ def drain_rag_job_updates(job: RagAnswerJob) -> bool:
 
 
 def friendly_error(error: Exception) -> str:
+    from src.rag.retrieval_errors import RetrievalError
     message = str(error)
     lowered = message.lower()
     if isinstance(error, DocumentProcessingError):
@@ -174,6 +176,8 @@ def friendly_error(error: Exception) -> str:
         return "無法載入重排模型。請確認已安裝 FlagEmbedding，並檢查網路連線或模型快取。"
     if isinstance(error, RerankerComputeError):
         return "重排模型計算失敗。請檢查模型快取與可用記憶體後再試。"
+    if isinstance(error, RetrievalError):
+        return error.user_message
     if "paddleocr" in lowered or "paddlepaddle" in lowered:
         return "需要 OCR 時找不到 PaddleOCR 或 PaddlePaddle。請先安裝 OCR 相依套件。"
     if "ocr" in lowered:
@@ -529,6 +533,11 @@ def render_vlm_controls(settings: Settings) -> Settings:
 
 def render_result(result: RagResult) -> None:
     st.subheader("回答")
+    for warning in result.warnings:
+        st.warning(warning)
+    if result.retrieval_counts:
+        st.caption("檢索統計")
+        st.json(result.retrieval_counts, expanded=False)
     st.write(result.answer)
 
     if result.sources:
@@ -605,6 +614,8 @@ def render_question_interface(settings: Settings) -> None:
                     question,
                     st.session_state["vector_store"],
                     settings,
+                    st.session_state.get("bm25_store"),
+                    st.session_state.get("chunk_registry"),
                 )
                 st.rerun()
 
@@ -709,6 +720,10 @@ def main() -> None:
     if st.session_state.get("active_knowledge_files"):
         st.caption("目前生效檔案：" + "、".join(st.session_state["active_knowledge_files"]))
     stats = st.session_state.get("knowledge_stats")
+    if stats and stats.get("bm25_status") == "empty_no_tokens":
+        st.warning("BM25 沒有可搜尋詞彙，本知識庫將以 Dense Retrieval 為主。")
+    if stats and stats.get("hybrid_verification_status") == "custom_unverified":
+        st.caption("Hybrid 已手動啟用；目前設定尚未通過正式品質驗收（custom_unverified）。")
     if stats:
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("文件數量", stats["documents"])

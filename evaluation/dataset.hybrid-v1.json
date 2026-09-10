@@ -1,0 +1,849 @@
+{
+  "version": "hybrid-eval-v1",
+  "sources": [
+    {
+      "path": "documents/evaluation/NIST.AI.100-1.pdf",
+      "sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1"
+    },
+    {
+      "path": "documents/evaluation/NIST.AI.600-1.pdf",
+      "sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a"
+    },
+    {
+      "path": "evaluation/fixtures/hybrid_identifiers.xlsx",
+      "sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2"
+    }
+  ],
+  "questions": [
+    {
+      "id": "semantic_paraphrase_001",
+      "category": "semantic_paraphrase",
+      "question": "AI RMF Core 在最高層級用哪四個功能來組織 AI 風險管理活動？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 5,
+            "chunk_ordinal": 3,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "govern, map, measure, and manage AI risks"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_002",
+      "category": "semantic_paraphrase",
+      "question": "依 EO 14110 的定義，Generative AI 會根據輸入資料產生什麼類型的內容？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 5,
+            "chunk_ordinal": 4,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "generate derived synthetic content"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_003",
+      "category": "semantic_paraphrase",
+      "question": "NIST AI RMF 是強制要求組織遵循的規範嗎？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 7,
+            "chunk_ordinal": 2,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "voluntary, rights-preserving, non-sector-specific"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_004",
+      "category": "semantic_paraphrase",
+      "question": "GAI 的 CBRN 風險涉及哪些四類危險領域？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 8,
+            "chunk_ordinal": 0,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "chemical, biological, radiological, or nuclear"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_005",
+      "category": "semantic_paraphrase",
+      "question": "組織的 AI 風險容忍度是否由 AI RMF 統一規定？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 12,
+            "chunk_ordinal": 0,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "does not prescribe risk tolerance"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_006",
+      "category": "semantic_paraphrase",
+      "question": "當生成式 AI 很有自信地產生錯誤或虛假內容時，NIST 如何描述這種現象？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 10,
+            "chunk_ordinal": 0,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "erroneous or false content in response to prompts"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_007",
+      "category": "semantic_paraphrase",
+      "question": "AI RMF 中哪個治理功能會貫穿其他風險管理功能？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 27,
+            "chunk_ordinal": 0,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "GOVERN is a cross-cutting function"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_008",
+      "category": "semantic_paraphrase",
+      "question": "為什麼訓練、維護與執行生成式 AI 可能帶來龐大的能源與環境負擔？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 12,
+            "chunk_ordinal": 0,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "resource-intensive activities"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_009",
+      "category": "semantic_paraphrase",
+      "question": "完成 AI RMF 的 MAP 階段後，組織應能對 AI 系統做出哪種初步決策？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 30,
+            "chunk_ordinal": 4,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "initial go/no-go decision"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_010",
+      "category": "semantic_paraphrase",
+      "question": "GAI 的智慧財產權風險是否包含未經授權產生或複製授權內容？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 9,
+            "chunk_ordinal": 0,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "licensed content without authorization"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_011",
+      "category": "semantic_paraphrase",
+      "question": "NIST 對 risk 的定義除了事件發生的可能性之外，還考量什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 9,
+            "chunk_ordinal": 1,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "the magnitude or degree of the consequences"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_012",
+      "category": "semantic_paraphrase",
+      "question": "GAI 模型除了可能洩漏個資之外，還可能對個人的敏感資訊做出什麼行為？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 11,
+            "chunk_ordinal": 5,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "leak, generate, or correctly infer sensitive information"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_013",
+      "category": "semantic_paraphrase",
+      "question": "組織應該把 AI 風險當成獨立問題處理，還是納入既有企業風險管理？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 13,
+            "chunk_ordinal": 4,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "AI risks should not be considered in isolation"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_014",
+      "category": "semantic_paraphrase",
+      "question": "生成式 AI 為什麼可能讓既有的社會偏見造成更大範圍的傷害？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 12,
+            "chunk_ordinal": 3,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "perpetuating and amplifying harms"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_015",
+      "category": "semantic_paraphrase",
+      "question": "NIST 修改 OECD 的 AI lifecycle 架構時，特別強調哪一組測試與驗證流程？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 14,
+            "chunk_ordinal": 3,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "test, evaluation, verification, and validation (TEVV) processes"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_016",
+      "category": "semantic_paraphrase",
+      "question": "人類與 GAI 互動時，可能出現排斥自動化、過度信任或過度依賴等哪些問題？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 8,
+            "chunk_ordinal": 4,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "algorithmic aversion, automation bias, over-reliance"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_017",
+      "category": "semantic_paraphrase",
+      "question": "AI RMF 在分析與監控 AI 風險時，可同時使用哪些類型的研究方法？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 33,
+            "chunk_ordinal": 0,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "quantitative, qualitative, or mixed-method"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_018",
+      "category": "semantic_paraphrase",
+      "question": "生成式 AI 大量產生內容時，為什麼可能降低資訊的可信度與完整性？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 8,
+            "chunk_ordinal": 4,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "may not distinguish fact from opinion"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_019",
+      "category": "semantic_paraphrase",
+      "question": "AI RMF 的 Current Profile 主要描述組織目前如何管理 AI 及其風險，對嗎？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 38,
+            "chunk_ordinal": 4,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "managed and the related risks in terms of current outcomes"
+        }
+      ]
+    },
+    {
+      "id": "semantic_paraphrase_020",
+      "category": "semantic_paraphrase",
+      "question": "GAI 為什麼可能降低駭客尋找並利用系統漏洞的門檻？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 8,
+            "chunk_ordinal": 5,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "discovery and exploitation of vulnerabilities to ease hacking"
+        }
+      ]
+    },
+    {
+      "id": "exact_term_021",
+      "category": "exact_term",
+      "question": "文件中「should cease in a safe manner until risks can be sufficiently managed」的意思與用途是什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 13,
+            "chunk_ordinal": 1,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "should cease in a safe manner until risks can be sufficiently managed"
+        }
+      ]
+    },
+    {
+      "id": "exact_term_022",
+      "category": "exact_term",
+      "question": "文件中「design, development, deployment, operation」的意思與用途是什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 6,
+            "chunk_ordinal": 4,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "design, development, deployment, operation"
+        }
+      ]
+    },
+    {
+      "id": "exact_term_023",
+      "category": "exact_term",
+      "question": "文件中「accountable and transparent」的意思與用途是什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 8,
+            "chunk_ordinal": 0,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "accountable and transparent"
+        }
+      ]
+    },
+    {
+      "id": "exact_term_024",
+      "category": "exact_term",
+      "question": "文件中「risks associated with activities or business processes common across sectors」的意思與用途是什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 5,
+            "chunk_ordinal": 3,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "risks associated with activities or business processes common across sectors"
+        }
+      ]
+    },
+    {
+      "id": "exact_term_025",
+      "category": "exact_term",
+      "question": "文件中「Negative residual risks」的意思與用途是什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 37,
+            "chunk_ordinal": 2,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "Negative residual risks"
+        }
+      ]
+    },
+    {
+      "id": "exact_term_026",
+      "category": "exact_term",
+      "question": "文件中「inciting, radicalizing, or threatening」的意思與用途是什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 10,
+            "chunk_ordinal": 5,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "inciting, radicalizing, or threatening"
+        }
+      ]
+    },
+    {
+      "id": "exact_term_027",
+      "category": "exact_term",
+      "question": "文件中「specific setting or application」的意思與用途是什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 38,
+            "chunk_ordinal": 2,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "specific setting or application"
+        }
+      ]
+    },
+    {
+      "id": "exact_term_028",
+      "category": "exact_term",
+      "question": "文件中「upstream third-party components」的意思與用途是什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 9,
+            "chunk_ordinal": 2,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "upstream third-party components"
+        }
+      ]
+    },
+    {
+      "id": "exact_term_029",
+      "category": "exact_term",
+      "question": "文件中「risk-based, resource-efficient, pro-innovation, and voluntary」的意思與用途是什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "7576edb531d9848825814ee88e28b1795d3a84b435b4b797d3670eafdc4a89f1",
+          "location": {
+            "page": 47,
+            "chunk_ordinal": 0,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "risk-based, resource-efficient, pro-innovation, and voluntary"
+        }
+      ]
+    },
+    {
+      "id": "exact_term_030",
+      "category": "exact_term",
+      "question": "文件中「Pre-deployment Testing」的意思與用途是什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "6e73620ab6b64e90ef2c04bf0e0d6246185a2f4b1b13cab0df494496cff89b6a",
+          "location": {
+            "page": 6,
+            "chunk_ordinal": 1,
+            "content_type": "text",
+            "extraction_method": "native"
+          },
+          "expected_text": "Pre-deployment Testing"
+        }
+      ]
+    },
+    {
+      "id": "exact_identifier_001",
+      "category": "exact_identifier",
+      "question": "FU038 代表什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record01",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "FU038"
+        }
+      ]
+    },
+    {
+      "id": "mixed_semantic_exact_001",
+      "category": "mixed_semantic_exact",
+      "question": "哪個欄位記錄維修單來源？，請說明 FU038 的用途。",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record01",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "FU038"
+        }
+      ]
+    },
+    {
+      "id": "exact_identifier_002",
+      "category": "exact_identifier",
+      "question": "ABC-123 代表什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record02",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "ABC-123"
+        }
+      ]
+    },
+    {
+      "id": "mixed_semantic_exact_002",
+      "category": "mixed_semantic_exact",
+      "question": "要查溫度感測器的維護資訊，請說明 ABC-123 的用途。",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record02",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "ABC-123"
+        }
+      ]
+    },
+    {
+      "id": "exact_identifier_003",
+      "category": "exact_identifier",
+      "question": "ZX900 代表什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record03",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "ZX900"
+        }
+      ]
+    },
+    {
+      "id": "mixed_semantic_exact_003",
+      "category": "mixed_semantic_exact",
+      "question": "要查備援電源的產品資料，請說明 ZX900 的用途。",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record03",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "ZX900"
+        }
+      ]
+    },
+    {
+      "id": "exact_identifier_004",
+      "category": "exact_identifier",
+      "question": "SOURCE_NOT_FOUND 代表什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record04",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "SOURCE_NOT_FOUND"
+        }
+      ]
+    },
+    {
+      "id": "mixed_semantic_exact_004",
+      "category": "mixed_semantic_exact",
+      "question": "找不到來源文件時如何判斷原因，請說明 SOURCE_NOT_FOUND 的用途。",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record04",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "SOURCE_NOT_FOUND"
+        }
+      ]
+    },
+    {
+      "id": "exact_identifier_005",
+      "category": "exact_identifier",
+      "question": "REPAIR_PENDING 代表什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record05",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "REPAIR_PENDING"
+        }
+      ]
+    },
+    {
+      "id": "mixed_semantic_exact_005",
+      "category": "mixed_semantic_exact",
+      "question": "如何辨識維修仍在處理中，請說明 REPAIR_PENDING 的用途。",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record05",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "REPAIR_PENDING"
+        }
+      ]
+    },
+    {
+      "id": "exact_identifier_006",
+      "category": "exact_identifier",
+      "question": "/REP/TobeRepair/Query 代表什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record06",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "/REP/TobeRepair/Query"
+        }
+      ]
+    },
+    {
+      "id": "mixed_semantic_exact_006",
+      "category": "mixed_semantic_exact",
+      "question": "想查詢待維修清單，請說明 /REP/TobeRepair/Query 的用途。",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record06",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "/REP/TobeRepair/Query"
+        }
+      ]
+    },
+    {
+      "id": "exact_identifier_007",
+      "category": "exact_identifier",
+      "question": "/CRM/Customer/Lookup 代表什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record07",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "/CRM/Customer/Lookup"
+        }
+      ]
+    },
+    {
+      "id": "mixed_semantic_exact_007",
+      "category": "mixed_semantic_exact",
+      "question": "需要依客戶資訊查詢資料，請說明 /CRM/Customer/Lookup 的用途。",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record07",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "/CRM/Customer/Lookup"
+        }
+      ]
+    },
+    {
+      "id": "exact_identifier_008",
+      "category": "exact_identifier",
+      "question": "2026-09-08 代表什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record08",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "2026-09-08"
+        }
+      ]
+    },
+    {
+      "id": "mixed_semantic_exact_008",
+      "category": "mixed_semantic_exact",
+      "question": "測試設備何時正式啟用，請說明 2026-09-08 的用途。",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record08",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "2026-09-08"
+        }
+      ]
+    },
+    {
+      "id": "exact_identifier_009",
+      "category": "exact_identifier",
+      "question": "09:30 代表什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record09",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "09:30"
+        }
+      ]
+    },
+    {
+      "id": "mixed_semantic_exact_009",
+      "category": "mixed_semantic_exact",
+      "question": "每天什麼時間產生維修報表，請說明 09:30 的用途。",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record09",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "09:30"
+        }
+      ]
+    },
+    {
+      "id": "exact_identifier_010",
+      "category": "exact_identifier",
+      "question": "1.8.0 代表什麼？",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record10",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "1.8.0"
+        }
+      ]
+    },
+    {
+      "id": "mixed_semantic_exact_010",
+      "category": "mixed_semantic_exact",
+      "question": "哪個版本開始支援維修來源查詢，請說明 1.8.0 的用途。",
+      "gold_targets": [
+        {
+          "source_content_sha256": "3c8045223a9a1f417096d891bc87ee7c64ef8c00e5a4ac949401146e67852ce2",
+          "location": {
+            "sheet_name": "Record10",
+            "row_start": 2,
+            "row_end": 2
+          },
+          "expected_text": "1.8.0"
+        }
+      ]
+    }
+  ]
+}

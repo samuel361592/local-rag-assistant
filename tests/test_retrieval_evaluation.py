@@ -363,7 +363,7 @@ def test_embedding_environment_check_reports_model_error() -> None:
 
 def test_evaluation_top_k_must_cover_largest_hit_rate_cutoff() -> None:
     with pytest.raises(EvaluationSetupError, match="RETRIEVAL_TOP_K 必須至少為 8"):
-        validate_evaluation_top_k(Settings(retrieval_top_k=7))
+        validate_evaluation_top_k(Settings(retrieval_top_k=7, top_k=4))
 
 
 @pytest.mark.parametrize(
@@ -542,7 +542,7 @@ def test_summary_prints_hit_rate_at_each_cutoff(
 
     output = capsys.readouterr().out
     assert "FAISS Candidate K: 40" in output
-    assert "Answer Top-K: 4" in output
+    assert "Answer Top-K: 8" in output
     assert "Baseline Retrieval" in output
     assert "Reranked Retrieval" not in output
     assert "Difference" not in output

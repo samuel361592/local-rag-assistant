@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import os
+import json
+from math import isfinite
+from .retrieval_errors import RetrievalConfigError
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,10 +22,22 @@ class Settings:
     chat_model: str = "qwen3:4b"
     chunk_size: int = 500
     chunk_overlap: int = 80
-    top_k: int = 4
+    top_k: int = 8
+    hybrid_search_enabled: bool = False
+    bm25_top_k: int = 20
+    fusion_top_k: int = 30
+    rrf_k: int = 60
+    bm25_k1: float = 1.5
+    bm25_b: float = 0.75
+    bm25_epsilon: float = 0.25
     reranker_enabled: bool = True
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     reranker_use_fp16: bool = False
+    reranker_device: str = "auto"
+    reranker_batch_size: int = 128
+    reranker_max_length: int = 512
+    reranker_revision: str = "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+    reranker_weights_sha256: str = "d9e3e081faff1eefb84019509b2f5558fd74c1a05a2c7db22f74174fcedb5286"
     retrieval_top_k: int = 20
     ocr_mode: str = "auto"
     ocr_lang: str = "ch"
@@ -45,6 +60,17 @@ class Settings:
     excel_max_chunk_chars: int = 4_096
 
     def __post_init__(self) -> None:
+        if self.reranker_batch_size <= 0 or self.reranker_max_length <= 0:
+            raise RetrievalConfigError("Reranker batch size 與 max length 必須大於 0。")
+        if self.reranker_enabled:
+            from .reranker import RERANKER_REVISION, RERANKER_WEIGHTS_SHA256
+            if self.reranker_revision != RERANKER_REVISION or self.reranker_weights_sha256 != RERANKER_WEIGHTS_SHA256:
+                raise RetrievalConfigError("Reranker 身分必須符合固定 revision 與權重 SHA-256。")
+        if self.hybrid_search_enabled:
+            if self.bm25_top_k <= 0 or self.rrf_k <= 0 or not self.top_k <= self.fusion_top_k <= self.retrieval_top_k + self.bm25_top_k:
+                raise RetrievalConfigError("Hybrid 候選數或 RRF K 不合法。")
+            if not all(isfinite(v) for v in (self.bm25_k1, self.bm25_b, self.bm25_epsilon)) or self.bm25_k1 <= 0 or not 0 <= self.bm25_b <= 1 or self.bm25_epsilon < 0:
+                raise RetrievalConfigError("BM25 參數不合法。")
         for name in (
             "excel_max_file_size_mb", "excel_max_sheets", "excel_max_row_index",
             "excel_max_column_index", "excel_max_cell_chars", "excel_max_row_chars",
@@ -118,7 +144,19 @@ def load_settings(
         override=override_env,
     )
     defaults = Settings()
+    release = json.loads(Path(__file__).with_name("release_defaults.json").read_text(encoding="utf-8"))
+    hybrid = _read_bool("HYBRID_SEARCH_ENABLED", release["hybrid_search_enabled"])
+    hybrid_values = {}
+    if hybrid:
+        for key in ("bm25_top_k", "fusion_top_k", "rrf_k"):
+            hybrid_values[key] = _read_int(key.upper(), getattr(defaults, key))
+        for key in ("bm25_k1", "bm25_b", "bm25_epsilon"):
+            try:
+                hybrid_values[key] = float(os.getenv(key.upper(), getattr(defaults, key)))
+            except ValueError as exc:
+                raise RetrievalConfigError("BM25 參數必須是數字。") from exc
     return Settings(
+        hybrid_search_enabled=hybrid, **hybrid_values,
         **{
             name: _read_int(name.upper(), getattr(defaults, name))
             for name in (
@@ -137,6 +175,11 @@ def load_settings(
             "RERANKER_ENABLED", defaults.reranker_enabled
         ),
         reranker_model=os.getenv("RERANKER_MODEL", defaults.reranker_model),
+        reranker_revision=os.getenv("RERANKER_REVISION", defaults.reranker_revision),
+        reranker_weights_sha256=os.getenv("RERANKER_WEIGHTS_SHA256", defaults.reranker_weights_sha256),
+        reranker_device=os.getenv("RERANKER_DEVICE", defaults.reranker_device),
+        reranker_batch_size=_read_int("RERANKER_BATCH_SIZE", defaults.reranker_batch_size),
+        reranker_max_length=_read_int("RERANKER_MAX_LENGTH", defaults.reranker_max_length),
         reranker_use_fp16=_read_bool(
             "RERANKER_USE_FP16", defaults.reranker_use_fp16
         ),

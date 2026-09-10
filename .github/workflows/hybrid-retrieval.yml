@@ -1,0 +1,27 @@
+name: Hybrid retrieval checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+jobs:
+  tests:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r requirements.txt
+      - run: python -m pytest -q
+      - name: Check published default
+        shell: python
+        run: |
+          import json, pathlib, subprocess, sys
+          release = json.loads(pathlib.Path('src/rag/release_defaults.json').read_text())
+          expected = 'true' if release['hybrid_search_enabled'] else 'false'
+          lines = pathlib.Path('.env.example').read_text(encoding='utf-8').splitlines()
+          assert f'HYBRID_SEARCH_ENABLED={expected}' in lines
+          if release['hybrid_search_enabled']:
+              subprocess.run([sys.executable, '-B', 'scripts/evaluate_retrieval.py', '--check-release'], check=True)

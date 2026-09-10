@@ -10,6 +10,9 @@ from langchain_core.documents import Document
 from langchain_ollama import OllamaEmbeddings
 
 from .config import Settings
+from .retrieval_errors import DenseRetrievalError
+import httpx
+from ollama import ResponseError
 
 
 def create_embeddings(settings: Settings) -> OllamaEmbeddings:
@@ -31,4 +34,7 @@ def create_vector_store(
 def similarity_search(vector_store: Any, question: str, top_k: int = 4) -> list[Document]:
     if not question.strip():
         raise ValueError("問題不可為空白。")
-    return list(vector_store.similarity_search(question, k=top_k))
+    try:
+        return list(vector_store.similarity_search(question, k=top_k))
+    except (httpx.HTTPError, ResponseError, ConnectionError, TimeoutError) as exc:
+        raise DenseRetrievalError("語意檢索服務暫時無法使用。", cause=exc) from exc

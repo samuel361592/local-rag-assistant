@@ -77,7 +77,7 @@ def test_workbook_headers_hidden_empty_rows_and_metadata():
     assert first.metadata == {
         "source": "sales.xlsx", "source_filename": "sales.xlsx", "source_type": "excel",
         "content_type": "text", "text_extraction_method": "excel", "sheet_name": "資料",
-        "sheet_hidden": False, "header_row": 2, "row_start": 3, "row_end": 5,
+        "sheet_index": 0, "sheet_hidden": False, "header_row": 2, "row_start": 3, "row_end": 5,
         "oversized_row": False,
     }
     assert "名稱 [A]：甲｜名稱 [B]：乙｜名稱 [A] [欄 C]：丙｜未命名欄位 [D]：丁" in first.page_content
@@ -268,8 +268,10 @@ def test_excel_only_does_not_initialize_models_or_splitter(monkeypatch):
         pytest.fail("Excel must not call OCR, VLM or the text splitter")
     for name in ("OCRService", "VLMService", "split_pdf_pages"):
         monkeypatch.setattr(document_loader, name, forbidden)
+    second = basic_workbook()
+    second.active["A2"] = "different source"
     batch = process_uploaded_documents([
-        upload(basic_workbook(), "a.xlsx"), upload(basic_workbook(), "b.xlsx"),
+        upload(basic_workbook(), "a.xlsx"), upload(second, "b.xlsx"),
     ], Settings(vlm_enabled=True))
     assert batch.page_count == 0
     assert batch.document_count == 2
@@ -282,13 +284,13 @@ def test_excel_only_does_not_initialize_models_or_splitter(monkeypatch):
 def test_mixed_batch_combines_all_sources(monkeypatch, others):
     def fake_load(file, settings, ocr, vlm):
         source_type = "pdf" if file.name.endswith("pdf") else "image"
-        return ([Document(page_content="sample", metadata={"source_type": source_type})], [], DocumentExtractionStats(), {}, {}, {})
+        return ([Document(page_content="sample", metadata={"source_type": source_type, "text_extraction_method": "ocr" if source_type == "image" else "native"})], [], DocumentExtractionStats(), {}, {}, {})
     monkeypatch.setattr(document_loader, "_load_pdf_pages", fake_load)
     monkeypatch.setattr(document_loader, "_load_image_page", fake_load)
-    batch = process_uploaded_documents([upload(basic_workbook()), *[Upload(b"", name) for name in others]], Settings())
+    batch = process_uploaded_documents([upload(basic_workbook()), *[Upload(name.encode(), name) for name in others]], Settings())
     assert len(batch.chunks) == 1 + len(others)
     assert batch.page_count == len(others)
-    assert batch.chunks[0].metadata["source_type"] == "excel"
+    assert any(c.metadata["source_type"] == "excel" for c in batch.chunks)
 
 
 def test_duplicate_and_unsupported_rejected_before_parsing():

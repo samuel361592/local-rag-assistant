@@ -134,12 +134,19 @@ def test_rerank_rejects_invalid_arguments(
         rerank_documents(question, [make_document("A")], FakeReranker([1.0]), top_k)
 
 
-def test_create_reranker_lazily_imports_and_caches(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_create_reranker_lazily_imports_and_caches(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    from hashlib import sha256
+    from src.rag import reranker as module
+    snapshot = tmp_path / module.RERANKER_REVISION
+    snapshot.mkdir()
+    (snapshot / "model.safetensors").write_bytes(b"test weights")
+    monkeypatch.setattr(module, "RERANKER_WEIGHTS_SHA256", sha256(b"test weights").hexdigest())
+    monkeypatch.setattr("huggingface_hub.snapshot_download", lambda **kwargs: str(snapshot))
     created: list[tuple[str, bool]] = []
     fake_module = ModuleType("FlagEmbedding")
 
     class FakeFlagReranker:
-        def __init__(self, model_name: str, use_fp16: bool) -> None:
+        def __init__(self, model_name: str, use_fp16: bool, **kwargs) -> None:
             created.append((model_name, use_fp16))
 
     fake_module.FlagReranker = FakeFlagReranker  # type: ignore[attr-defined]
@@ -150,7 +157,7 @@ def test_create_reranker_lazily_imports_and_caches(monkeypatch: pytest.MonkeyPat
     second = create_reranker("test/model", False)
 
     assert first is second
-    assert created == [("test/model", False)]
+    assert created == [(str(snapshot), False)]
     create_reranker.cache_clear()
 
 
@@ -220,7 +227,7 @@ def test_disabled_service_uses_top_k_without_creating_reranker(
 
     result = service.answer("問題")
 
-    assert vector_store.requested_k == [4]
+    assert vector_store.requested_k == [20]
     assert result.chunks == documents[:4]
 
 
@@ -270,8 +277,9 @@ def test_enabled_service_reranks_all_candidates_and_only_sends_top_k() -> None:
     assert "內容：A" not in human_prompt
     assert [event.stage for event in events] == [
         "received",
-        "retrieve",
-        "retrieved",
+        "dense_retrieve",
+        "dense_retrieved",
+        "hybrid_skipped",
         "rerank",
         "reranked",
         "context",

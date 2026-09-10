@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import unicodedata
+from hashlib import sha256
+from .chunk_identity import assign_chunk_ids
 import tempfile
 from dataclasses import dataclass, field
 from importlib.metadata import PackageNotFoundError, version
@@ -151,7 +154,10 @@ def pdf_processing_cache_settings(settings: Settings) -> dict[str, object]:
 def _read_upload(uploaded_file: BinaryIO) -> bytes:
     if hasattr(uploaded_file, "getvalue"):
         return uploaded_file.getvalue()  # type: ignore[no-any-return]
+    position = uploaded_file.tell()
+    uploaded_file.seek(0)
     content = uploaded_file.read()
+    uploaded_file.seek(position)
     return content if isinstance(content, bytes) else bytes(content)
 
 
@@ -493,11 +499,19 @@ def process_uploaded_documents(
     filenames = [Path(getattr(file, "name", "未命名.pdf")).name for file in uploaded_files]
     seen: set[str] = set()
     for filename in filenames:
-        if filename.casefold() in seen:
+        if unicodedata.normalize("NFKC", filename).casefold() in seen:
             raise DocumentProcessingError(f"同批次檔名重複「{filename}」，請重新命名後上傳。")
-        seen.add(filename.casefold())
+        seen.add(unicodedata.normalize("NFKC", filename).casefold())
         if Path(filename).suffix.lower() not in {".pdf", ".xlsx", *SUPPORTED_IMAGE_SUFFIXES}:
             raise DocumentProcessingError(f"不支援「{filename}」；支援 PDF、PNG、JPG、JPEG、XLSX。")
+    source_hashes = {}
+    seen_hashes = {}
+    for upload, filename in zip(uploaded_files, filenames):
+        value = sha256(_read_upload(upload)).hexdigest()
+        if value in seen_hashes:
+            raise DocumentProcessingError(f"檔案內容重複：{seen_hashes[value]}、{filename}。")
+        seen_hashes[value] = filename
+        source_hashes[filename] = value
     needs_visual_service = any(Path(name).suffix.lower() != ".xlsx" for name in filenames)
     if needs_visual_service and _vlm_active(settings) and vlm_service is None:
         try:
@@ -561,6 +575,7 @@ def process_uploaded_documents(
 
     if not all_chunks:
         raise PDFProcessingError("檔案沒有可建立索引的文字或視覺描述；請確認 OCR/VLM 結果與檔案品質。")
+    all_chunks = assign_chunk_ids(all_chunks, source_hashes)
     visual_chunk_count = sum(
         chunk.metadata.get(CONTENT_TYPE_KEY) == VISUAL_CONTENT_TYPE for chunk in all_chunks
     )

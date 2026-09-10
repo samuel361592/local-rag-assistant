@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from threading import Event
 from typing import Any, Callable, Sequence
 
@@ -10,6 +10,10 @@ from langchain_core.documents import Document
 from langchain_ollama import ChatOllama
 
 from .config import Settings
+from .retrieval_errors import (DegradableRetrievalError, KnowledgeStateError, DenseRetrievalError,
+                               UserInputError, RetrievalError)
+from .chunk_identity import validate_candidates
+from .hybrid_retriever import ranked_documents, reciprocal_rank_fusion
 from .source_location import build_location_label
 from .document_loader import (
     CONTENT_TYPE_KEY,
@@ -53,6 +57,9 @@ class RagResult:
     answer: str
     sources: list[SourceReference]
     chunks: list[Document]
+    degraded_components: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    retrieval_counts: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +67,7 @@ class RagProgressEvent:
     stage: str
     message: str
     detail: str = ""
+    data: dict = field(default_factory=dict)
 
 
 ProgressCallback = Callable[[RagProgressEvent], None]
@@ -145,7 +153,14 @@ class RagService:
         settings: Settings,
         chat_model: Any | None = None,
         reranker: Any | None = None,
+        bm25_store: Any | None = None,
+        chunk_registry: dict | None = None,
     ) -> None:
+        self.bm25_store = bm25_store
+        self.chunk_registry = chunk_registry or {}
+        self.degraded_components = []
+        self.warnings = []
+        self.retrieval_counts = {}
         self.vector_store = vector_store
         self.settings = settings
         self.reranker = reranker
@@ -156,6 +171,22 @@ class RagService:
         )
 
     def _retrieve_chunks(
+        self, question, progress_callback=None, cancellation_callback=None,
+    ):
+        try:
+            return self._retrieve_chunks_impl(question, progress_callback, cancellation_callback)
+        except RagAnswerCancelled:
+            raise
+        except Exception as exc:
+            self.retrieval_counts["final_chunk_count"] = None
+            if self.retrieval_counts.get("reranker_status") is None:
+                self.retrieval_counts["reranker_status"] = "not_run_upstream_failure"
+            _emit_progress(progress_callback, "retrieval_failed", "檢索失敗，請稍後重試或重新建庫。")
+            if isinstance(exc, RetrievalError):
+                raise
+            raise RetrievalError("檢索發生未預期錯誤。", cause=exc) from exc
+
+    def _retrieve_chunks_impl(
         self,
         question: str,
         progress_callback: ProgressCallback | None = None,
@@ -167,60 +198,106 @@ class RagService:
             if cancellation_callback is not None:
                 cancellation_callback()
 
-        candidate_k = (
-            self.settings.retrieval_top_k
-            if self.settings.reranker_enabled
-            else self.settings.top_k
-        )
+        self.degraded_components = []
+        self.warnings = []
+        counts = self.retrieval_counts = {k: None for k in (
+            "dense_candidate_count", "bm25_candidate_count", "union_unique_count",
+            "fused_candidate_count", "reranker_input_count", "reranker_output_count", "final_chunk_count")}
+        hybrid = self.settings.hybrid_search_enabled
+        if hybrid and (self.bm25_store is None or not self.chunk_registry):
+            raise KnowledgeStateError("知識庫狀態不完整，請重新建庫。")
+        def emit(stage, message, **data):
+            if progress_callback is not None:
+                progress_callback(RagProgressEvent(stage, message, data={**counts, **data}))
+        def degraded(component):
+            self.degraded_components.append(component)
+            warning = f"{component} 暫時無法使用，已改用可用檢索排名。"
+            self.warnings.append(warning)
+            emit("retrieval_degraded", warning)
+        dense, sparse, errors = [], [], []
         check_cancelled()
-        _emit_progress(
-            progress_callback,
-            "retrieve",
-            f"正在使用 FAISS 檢索前 {candidate_k} 個候選文字區塊。",
-        )
-        candidates = similarity_search(self.vector_store, question, candidate_k)
+        emit("dense_retrieve", "正在執行 FAISS 語意檢索。")
+        try:
+            dense = similarity_search(self.vector_store, question, self.settings.retrieval_top_k)
+            if self.chunk_registry:
+                validate_candidates(dense, self.chunk_registry)
+                dense = [r.document for r in ranked_documents(dense)]
+            counts["dense_candidate_count"] = len(dense)
+            counts["dense_status"] = "success" if dense else "success_empty"
+            emit("dense_retrieved", f"語意檢索找到 {len(dense)} 筆候選。")
+        except DenseRetrievalError as exc:
+            errors.append(("dense", exc))
+            counts["dense_status"] = "error"
+            emit("dense_failed", "語意檢索失敗。")
+        except Exception:
+            counts["dense_status"] = "error"
+            emit("dense_failed", "語意檢索無法完成。")
+            raise
         check_cancelled()
-        _emit_progress(
-            progress_callback,
-            "retrieved",
-            f"已找到 {len(candidates)} 個候選文字區塊。",
-        )
-        if not candidates or not self.settings.reranker_enabled:
-            return candidates
-
+        if hybrid:
+            emit("sparse_retrieve", "正在執行 BM25 關鍵字檢索。")
+            try:
+                sparse = self.bm25_store.search(question, self.settings.bm25_top_k)
+                validate_candidates([r.document for r in sparse], self.chunk_registry)
+                counts["bm25_candidate_count"] = len(sparse)
+                counts["bm25_status"] = ("empty_no_tokens" if self.bm25_store.status == "empty_no_tokens"
+                                          else "success" if sparse else "success_empty")
+                emit("sparse_retrieved", f"關鍵字檢索找到 {len(sparse)} 筆候選。")
+            except DegradableRetrievalError as exc:
+                errors.append(("bm25", exc))
+                counts["bm25_status"] = "error"
+                emit("sparse_failed", "關鍵字檢索失敗。")
+            except Exception:
+                counts["bm25_status"] = "error"
+                emit("sparse_failed", "關鍵字檢索無法完成。")
+                raise
+        else:
+            counts["bm25_status"] = "disabled"
+            emit("hybrid_skipped", "Hybrid 已停用。", reason="disabled")
+        if errors and not (dense or sparse):
+            raise errors[0][1]
+        for component, _ in errors:
+            degraded(component)
+        if hybrid:
+            emit("fusion", "正在合併檢索排名。")
+            counts["union_unique_count"] = len({d.metadata["chunk_id"] for d in dense} | {r.chunk_id for r in sparse})
+            candidates = reciprocal_rank_fusion([ranked_documents(dense), sparse], self.settings.rrf_k, self.settings.fusion_top_k)
+            candidates = [self.chunk_registry[d.metadata["chunk_id"]] for d in candidates]
+            counts["fused_candidate_count"] = len(candidates)
+            emit("fused", f"融合後有 {len(candidates)} 筆候選。")
+        else:
+            candidates = dense
         check_cancelled()
-        _emit_progress(
-            progress_callback,
-            "rerank",
-            f"正在使用 {self.settings.reranker_model} 重新排序。",
-        )
-        if self.reranker is None:
-            self.reranker = create_reranker(
-                self.settings.reranker_model,
-                self.settings.reranker_use_fp16,
-            )
-        chunks = rerank_documents(
-            question,
-            candidates,
-            self.reranker,
-            self.settings.top_k,
-        )
+        chunks = candidates[:self.settings.top_k]
+        if not self.settings.reranker_enabled:
+            counts["reranker_status"] = "disabled"
+            emit("rerank_skipped", "重排已停用。", reason="disabled")
+        elif not candidates:
+            counts["reranker_input_count"] = counts["reranker_output_count"] = 0
+            counts["reranker_status"] = "success_empty"
+            emit("rerank_skipped", "沒有候選，略過重排。", reason="no_candidates")
+        else:
+            emit("rerank", "正在重新排序候選資料。")
+            counts["reranker_input_count"] = len(candidates)
+            try:
+                if self.reranker is None:
+                    self.reranker = create_reranker(self.settings.reranker_model, self.settings.reranker_use_fp16,
+                        device=self.settings.reranker_device, batch_size=self.settings.reranker_batch_size,
+                        max_length=self.settings.reranker_max_length)
+                chunks = rerank_documents(question, candidates, self.reranker, self.settings.top_k)
+                counts["reranker_output_count"] = len(candidates)
+                counts["reranker_status"] = "success"
+                _emit_progress(progress_callback, "reranked", f"重排完成，選出 {len(chunks)} 筆。", "\n".join(_source_details(d, i).location_label for i, d in enumerate(chunks, 1)))
+            except DegradableRetrievalError:
+                counts["reranker_status"] = "error"
+                emit("rerank_failed", "重排失敗。")
+                degraded("reranker")
+            except Exception:
+                counts["reranker_status"] = "error"
+                emit("rerank_failed", "重排無法完成。")
+                raise
         check_cancelled()
-        sources = [
-            _source_details(chunk, number)
-            for number, chunk in enumerate(chunks, start=1)
-        ]
-        detail = "\n".join(
-            f"[來源 {source.number}｜{source.content_type_label}] "
-            f"{source.filename}，{source.location_label}"
-            for source in sources
-        )
-        _emit_progress(
-            progress_callback,
-            "reranked",
-            f"重排完成，選出前 {len(chunks)} 個文字區塊。",
-            detail,
-        )
+        counts["final_chunk_count"] = len(chunks)
         return chunks
 
     def answer(
@@ -230,7 +307,7 @@ class RagService:
     ) -> RagResult:
         clean_question = question.strip()
         if not clean_question:
-            raise ValueError("請先輸入問題。")
+            raise UserInputError("請先輸入問題。")
 
         _emit_progress(progress_callback, "received", "已收到問題。", clean_question)
         chunks = self._retrieve_chunks(clean_question, progress_callback)
@@ -240,7 +317,7 @@ class RagService:
                 "no_results",
                 "沒有檢索到可用文字區塊。",
             )
-            return RagResult(INSUFFICIENT_INFORMATION_MESSAGE, [], [])
+            return RagResult(INSUFFICIENT_INFORMATION_MESSAGE, [], [], list(self.degraded_components), list(self.warnings), dict(self.retrieval_counts))
 
         _emit_progress(
             progress_callback,
@@ -261,7 +338,7 @@ class RagService:
         )
         answer = _message_text(response) or INSUFFICIENT_INFORMATION_MESSAGE
         _emit_progress(progress_callback, "complete", "回答產生完成。")
-        return RagResult(answer, sources, chunks)
+        return RagResult(answer, sources, chunks, list(self.degraded_components), list(self.warnings), dict(self.retrieval_counts))
 
     def answer_stream(
         self,
@@ -275,7 +352,7 @@ class RagService:
 
         clean_question = question.strip()
         if not clean_question:
-            raise ValueError("請先輸入問題。")
+            raise UserInputError("請先輸入問題。")
 
         chunks: list[Document] = []
         sources: list[SourceReference] = []
@@ -287,7 +364,8 @@ class RagService:
             partial_answer = "".join(answer_parts).strip()
             _emit_progress(progress_callback, "cancelled", "回答已由使用者停止。")
             raise RagAnswerCancelled(
-                RagResult(partial_answer, list(sources), list(chunks))
+                RagResult(partial_answer, list(sources), list(chunks), list(self.degraded_components),
+                          list(self.warnings), dict(self.retrieval_counts))
             )
 
         raise_if_cancelled()
@@ -303,7 +381,7 @@ class RagService:
                 "no_results",
                 "沒有檢索到可用文字區塊。",
             )
-            return RagResult(INSUFFICIENT_INFORMATION_MESSAGE, [], [])
+            return RagResult(INSUFFICIENT_INFORMATION_MESSAGE, [], [], list(self.degraded_components), list(self.warnings), dict(self.retrieval_counts))
 
         raise_if_cancelled()
         _emit_progress(
@@ -342,4 +420,4 @@ class RagService:
 
         answer = "".join(answer_parts).strip() or INSUFFICIENT_INFORMATION_MESSAGE
         _emit_progress(progress_callback, "complete", "回答產生完成。")
-        return RagResult(answer, sources, chunks)
+        return RagResult(answer, sources, chunks, list(self.degraded_components), list(self.warnings), dict(self.retrieval_counts))

@@ -7,11 +7,18 @@ from functools import lru_cache
 from math import isfinite
 from numbers import Real
 from typing import Any
+from pathlib import Path
+from hashlib import sha256
+import httpx
+from .retrieval_errors import RerankerOperationalError, RerankerOutputError, RerankerIntegrityError
+
+RERANKER_REVISION = "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+RERANKER_WEIGHTS_SHA256 = "d9e3e081faff1eefb84019509b2f5558fd74c1a05a2c7db22f74174fcedb5286"
 
 from langchain_core.documents import Document
 
 
-class RerankerError(RuntimeError):
+class RerankerError(RerankerOperationalError):
     """Reranker 載入或計算失敗。"""
 
 
@@ -23,7 +30,7 @@ class RerankerDownloadError(RerankerError):
     """無法從 Hugging Face 下載模型。"""
 
 
-class RerankerModelNotFoundError(RerankerError):
+class RerankerModelNotFoundError(RerankerIntegrityError):
     """指定的 Hugging Face 模型不存在或無法存取。"""
 
 
@@ -52,7 +59,8 @@ def _is_memory_error(error: BaseException) -> bool:
 
 
 @lru_cache(maxsize=None)
-def create_reranker(model_name: str, use_fp16: bool) -> Any:
+def create_reranker(model_name: str, use_fp16: bool, *, device: str | None = None,
+                    batch_size: int = 128, max_length: int = 512) -> Any:
     """延遲載入並快取 FlagReranker；不在模組 import 時載入模型。"""
 
     clean_model_name = model_name.strip()
@@ -66,9 +74,40 @@ def create_reranker(model_name: str, use_fp16: bool) -> Any:
             "未安裝 FlagEmbedding，無法建立 Reranker。"
         ) from exc
 
+    from huggingface_hub import snapshot_download
+    from huggingface_hub.errors import LocalEntryNotFoundError
     try:
-        return FlagReranker(clean_model_name, use_fp16=use_fp16)
+        try:
+            snapshot = Path(snapshot_download(repo_id=clean_model_name, revision=RERANKER_REVISION,
+                                               local_files_only=True))
+        except LocalEntryNotFoundError:
+            snapshot = Path(snapshot_download(repo_id=clean_model_name, revision=RERANKER_REVISION))
+        weight = snapshot / "model.safetensors"
+        if snapshot.name != RERANKER_REVISION or not weight.is_file():
+            raise RerankerIntegrityError("Reranker Snapshot 不符合固定版本。")
+        checksum = sha256()
+        with weight.open("rb") as handle:
+            for block in iter(lambda: handle.read(1024 * 1024), b""):
+                checksum.update(block)
+        if checksum.hexdigest() != RERANKER_WEIGHTS_SHA256:
+            raise RerankerIntegrityError("Reranker 權重驗證失敗。")
+        options = {"batch_size": batch_size, "max_length": max_length, "normalize": True}
+        if device in (None, "auto"):
+            import torch
+            device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        options["devices"] = [device]
+        return FlagReranker(str(snapshot), use_fp16=use_fp16, **options)
+    except RerankerIntegrityError:
+        raise
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            raise RerankerModelNotFoundError("固定 Reranker revision 或檔案不存在。", cause=exc) from exc
+        raise RerankerDownloadError("Reranker 下載服務暫時無法使用。", cause=exc) from exc
+    except httpx.RequestError as exc:
+        raise RerankerDownloadError("Reranker 下載連線失敗。", cause=exc) from exc
     except Exception as exc:
+        if not isinstance(exc, (OSError, RuntimeError, MemoryError)):
+            raise
         detail = _error_detail(exc)
         lowered = detail.casefold()
         if _is_memory_error(exc):
@@ -141,7 +180,7 @@ def rerank_documents(
     pairs = [[clean_question, document.page_content] for document in documents]
     try:
         raw_scores = reranker.compute_score(pairs, normalize=True)
-    except Exception as exc:
+    except (OSError, RuntimeError, MemoryError) as exc:
         detail = _error_detail(exc)
         if _is_memory_error(exc):
             raise RerankerMemoryError(
@@ -152,9 +191,9 @@ def rerank_documents(
     try:
         scores = _normalize_scores(raw_scores)
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"Reranker 回傳無效分數：{exc}") from exc
+        raise RerankerOutputError(f"Reranker 回傳無效分數：{exc}", cause=exc) from exc
     if len(scores) != len(documents):
-        raise ValueError(
+        raise RerankerOutputError(
             "Reranker 分數數量與候選文件數量不同："
             f"{len(scores)} != {len(documents)}。"
         )

@@ -639,6 +639,18 @@ def main() -> int:
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8")
 
+    if "--check-release" in sys.argv:
+        from src.rag.acceptance import verify_promotion
+        try:
+            verify_promotion(PROJECT_ROOT)
+            print("Release acceptance verified.")
+            return 0
+        except Exception as exc:
+            print(f"Release is unverified: {exc}", file=sys.stderr)
+            return 1
+    if "--hybrid" in sys.argv:
+        from src.rag.hybrid_cli import main as hybrid_main
+        return hybrid_main()
     try:
         run_evaluation()
     except (DatasetError, EvaluationSetupError, PDFProcessingError, ValueError) as exc:

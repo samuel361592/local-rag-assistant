@@ -1,0 +1,70 @@
+{
+  "run_id": "20260910T025149723691Z_59041ccf7f68_3f4794f4158d",
+  "config_id": "3f4794f4158d1dee23bf0e615d69797a2bdffb0ff45bcb3441014f5bc849ede4",
+  "dataset_version": "hybrid-eval-v1",
+  "dataset_sha256": "22f962b1435fedf7d429e54cc846091a09889035680a8072d1d5e2ac0bebb44f",
+  "config_sha256": "7effcbad48bf5b4a70a4f1c3a02ec2fcba8a2c50d489c939b2b41f70bf88264b",
+  "run_purpose": "tuning",
+  "evaluated_commit": "59041ccf7f68a3a52d69ce89a09423faf0a4b4f2",
+  "config": {
+    "evaluation_depth": 20,
+    "answer_top_k": 8,
+    "tokenizer_version": "bm25-tokenizer-v1",
+    "retrieval_execution_mode": "sequential_dense_then_bm25",
+    "cache_policy": "acceptance-cache-v1",
+    "environment_manifest": "evaluation/environments/hybrid-v1.json",
+    "models": {
+      "embedding": {
+        "name": "bge-m3:latest",
+        "digest": "7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab"
+      },
+      "generator": {
+        "name": "qwen3:4b",
+        "digest": "359d7dd4bcdab3d86b87d73ac27966f4dbb9f5efdfcc75d34a8764a09474fae7"
+      }
+    },
+    "reranker_identity": {
+      "repo_id": "BAAI/bge-reranker-v2-m3",
+      "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+      "weights_sha256": "d9e3e081faff1eefb84019509b2f5558fd74c1a05a2c7db22f74174fcedb5286"
+    },
+    "reranker_inference": {
+      "device": "cpu",
+      "use_fp16": false,
+      "dtype": "float32",
+      "batch_size": 16,
+      "max_length": 512,
+      "normalize": true
+    },
+    "threads": 4,
+    "seed": 20260908,
+    "rank_bm25_version": "0.2.2",
+    "settings": {
+      "embedding_model": "bge-m3:latest",
+      "chat_model": "qwen3:4b",
+      "chunk_size": 500,
+      "chunk_overlap": 80,
+      "top_k": 8,
+      "retrieval_top_k": 20,
+      "bm25_top_k": 20,
+      "fusion_top_k": 30,
+      "rrf_k": 60,
+      "bm25_k1": 1.5,
+      "bm25_b": 0.75,
+      "bm25_epsilon": 0.25,
+      "hybrid_search_enabled": true,
+      "reranker_enabled": true,
+      "ocr_mode": "disabled",
+      "vlm_enabled": false
+    }
+  },
+  "cache_root": "C:\\Users\\dsc\\.cache",
+  "gate": {
+    "status": "ERROR"
+  },
+  "worktree_status": " M .env.example\n M app.py\n M requirements.txt\n M scripts/evaluate_retrieval.py\n M src/rag/config.py\n M src/rag/document_loader.py\n M src/rag/excel_loader.py\n M src/rag/knowledge_state.py\n M src/rag/rag_service.py\n M src/rag/reranker.py\n M src/rag/vector_store.py\n M tests/test_context_formatting.py\n M tests/test_excel_processing.py\n M tests/test_reranker.py\n M tests/test_retrieval_evaluation.py\n?? .gitattributes\n?? docs/\n?? evaluation/config.hybrid-v1.json\n?? evaluation/dataset.hybrid-v1.json\n?? evaluation/environments/\n?? evaluation/fixtures/\n?? evaluation/prepare_hybrid.py\n?? evaluation/results/\n?? src/rag/acceptance.py\n?? src/rag/bm25_store.py\n?? src/rag/chunk_identity.py\n?? src/rag/hybrid_cache.py\n?? src/rag/hybrid_cli.py\n?? src/rag/hybrid_evaluation.py\n?? src/rag/hybrid_retriever.py\n?? src/rag/release_defaults.json\n?? src/rag/retrieval_errors.py\n?? src/rag/tokenizer_userdict.txt\n?? tests/test_hybrid_evaluation.py\n?? tests/test_hybrid_retrieval.py\n",
+  "error": {
+    "error_code": "INTERNAL_RETRIEVAL_ERROR",
+    "message": "[WinError 5] 存取被拒。: 'C:\\\\Users\\\\dsc\\\\.cache\\\\hybrid-faiss'"
+  }
+}

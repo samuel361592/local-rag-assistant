@@ -18,7 +18,7 @@ from src.rag.rag_service import (
 
 class EmptyVectorStore:
     def similarity_search(self, _question: str, k: int) -> list[Document]:
-        assert k == 4
+        assert k == 20
         return []
 
 
@@ -32,7 +32,7 @@ class SingleDocumentVectorStore:
         self.calls = 0
 
     def similarity_search(self, _question: str, k: int) -> list[Document]:
-        assert k == 4
+        assert k == 20
         self.calls += 1
         return [
             Document(
@@ -122,8 +122,10 @@ def test_answer_reports_progress_events_when_no_results() -> None:
 
     assert [event.stage for event in events] == [
         "received",
-        "retrieve",
-        "retrieved",
+        "dense_retrieve",
+        "dense_retrieved",
+        "hybrid_skipped",
+        "rerank_skipped",
         "no_results",
     ]
 

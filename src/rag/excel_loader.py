@@ -174,7 +174,7 @@ def load_excel_documents(
                 raise ExcelProcessingError(f"工作表超過 EXCEL_MAX_SHEETS={settings.excel_max_sheets}。")
             chunks: list[Document] = []
             indexed_sheets = row_count = missing_cache_count = 0
-            for value_sheet in sheets:
+            for sheet_index, value_sheet in enumerate(sheets):
                 sheet_name = value_sheet.title
                 if len(sheet_name) > 31:
                     raise ExcelProcessingError("工作表名稱超過 31 字元。")
@@ -192,6 +192,7 @@ def load_excel_documents(
                     "source": filename, "source_filename": filename,
                     "source_type": "excel", "content_type": "text",
                     "text_extraction_method": "excel", "sheet_name": sheet_name,
+                    "sheet_index": sheet_index,
                     "sheet_hidden": value_sheet.sheet_state != "visible",
                 }
 

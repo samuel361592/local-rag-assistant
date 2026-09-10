@@ -1,0 +1,52 @@
+{
+  "evaluation_depth": 20,
+  "answer_top_k": 8,
+  "tokenizer_version": "bm25-tokenizer-v1",
+  "retrieval_execution_mode": "sequential_dense_then_bm25",
+  "cache_policy": "acceptance-cache-v1",
+  "environment_manifest": "evaluation/environments/hybrid-v1.json",
+  "models": {
+    "embedding": {
+      "name": "bge-m3:latest",
+      "digest": "7907646426070047a77226ac3e684fbbe8410524f7b4a74d02837e43f2146bab"
+    },
+    "generator": {
+      "name": "qwen3:4b",
+      "digest": "359d7dd4bcdab3d86b87d73ac27966f4dbb9f5efdfcc75d34a8764a09474fae7"
+    }
+  },
+  "reranker_identity": {
+    "repo_id": "BAAI/bge-reranker-v2-m3",
+    "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+    "weights_sha256": "d9e3e081faff1eefb84019509b2f5558fd74c1a05a2c7db22f74174fcedb5286"
+  },
+  "reranker_inference": {
+    "device": "cpu",
+    "use_fp16": false,
+    "dtype": "float32",
+    "batch_size": 16,
+    "max_length": 512,
+    "normalize": true
+  },
+  "threads": 4,
+  "seed": 20260908,
+  "rank_bm25_version": "0.2.2",
+  "settings": {
+    "embedding_model": "bge-m3:latest",
+    "chat_model": "qwen3:4b",
+    "chunk_size": 500,
+    "chunk_overlap": 80,
+    "top_k": 8,
+    "retrieval_top_k": 20,
+    "bm25_top_k": 20,
+    "fusion_top_k": 30,
+    "rrf_k": 60,
+    "bm25_k1": 1.5,
+    "bm25_b": 0.75,
+    "bm25_epsilon": 0.25,
+    "hybrid_search_enabled": true,
+    "reranker_enabled": true,
+    "ocr_mode": "disabled",
+    "vlm_enabled": false
+  }
+}
