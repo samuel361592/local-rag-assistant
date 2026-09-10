@@ -2,10 +2,11 @@ from copy import deepcopy
 from fractions import Fraction
 from pathlib import Path
 import json
+import subprocess
 import pytest
 
 from src.rag.acceptance import (config_id, run_id, repository_module_name, safe_path,
-                                validate_release_manifest, write_result)
+                                hash_file, validate_release_manifest, verify_promotion, write_result)
 from src.rag.hybrid_evaluation import exact_metrics, quality_gate, fraction_json, percentile, gold_matches
 from src.rag.retrieval_errors import RetrievalConfigError
 from src.rag.hybrid_cli import validate_dataset, validate_pipeline_config
@@ -62,6 +63,55 @@ def test_release_manifest_schema_and_cross_field_identity_are_strict():
             validate_release_manifest(invalid)
     with pytest.raises(RetrievalConfigError):
         validate_release_manifest({**manifest, "extra": True})
+
+
+def test_promotion_verifies_git_ancestry_allowed_diff_and_committed_bytes(tmp_path):
+    def git(*args):
+        return subprocess.check_output(["git", "-C", str(tmp_path), *args]).decode().strip()
+
+    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "test@example.com"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], check=True)
+    (tmp_path / "src/rag").mkdir(parents=True)
+    (tmp_path / "src/rag/release_defaults.json").write_text(
+        '{"schema_version":1,"hybrid_search_enabled":false}\n', encoding="utf-8")
+    (tmp_path / ".env.example").write_text("HYBRID_SEARCH_ENABLED=false\n", encoding="utf-8")
+    (tmp_path / ".gitattributes").write_text("* -text\n", encoding="utf-8")
+    (tmp_path / "pipeline.py").write_text("VALUE = 1\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-m", "evaluated"], check=True, capture_output=True)
+    evaluated = git("rev-parse", "HEAD")
+
+    config = {"fixed": True}
+    cid = config_id(config)
+    rid = f"20260910T010203123456Z_{evaluated[:12]}_{cid[:12]}"
+    fingerprint_manifest = {"schema": "pipeline-fingerprint-v2",
+        "files": {"pipeline.py": hash_file(tmp_path / "pipeline.py")},
+        "models": {}, "runtime": {}}
+    fingerprint_id = config_id(fingerprint_manifest)
+    result = {"run_purpose": "acceptance", "gate": {"status": "PASSED"},
+        "evaluated_commit": evaluated, "pipeline_fingerprint": fingerprint_id,
+        "dataset_version": "hybrid-eval-v1", "config_id": cid, "run_id": rid,
+        "config": config, "fingerprint_manifest": fingerprint_manifest}
+    result_relative = f"evaluation/results/hybrid-eval-v1/{cid}/{rid}.json"
+    result_path = tmp_path / result_relative
+    result_path.parent.mkdir(parents=True)
+    result_path.write_text(json.dumps(result) + "\n", encoding="utf-8")
+    manifest = {"dataset_version": "hybrid-eval-v1", "config_id": cid, "run_id": rid,
+        "evaluated_commit": evaluated, "pipeline_fingerprint": fingerprint_id,
+        "decision_status": "PASSED", "verified_at": "2026-09-10T01:02:03.123456Z"}
+    manifest_path = tmp_path / "evaluation/releases/hybrid-default.json"
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_text(json.dumps(manifest) + "\n", encoding="utf-8")
+    (tmp_path / "src/rag/release_defaults.json").write_text(
+        '{"schema_version":1,"hybrid_search_enabled":true}\n', encoding="utf-8")
+    (tmp_path / ".env.example").write_text("HYBRID_SEARCH_ENABLED=true\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-m", "promote"], check=True, capture_output=True)
+    assert verify_promotion(tmp_path) == manifest
+    result_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    with pytest.raises(RetrievalConfigError):
+        verify_promotion(tmp_path)
 
 
 def test_repository_module_name_does_not_resolve_third_party_relative_paths(tmp_path, monkeypatch):

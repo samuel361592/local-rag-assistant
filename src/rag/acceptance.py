@@ -242,9 +242,11 @@ def verify_promotion(root, manifest_path="evaluation/releases/hybrid-default.jso
             if set(new) != {"schema_version", "hybrid_search_enabled"} or new["schema_version"] != old["schema_version"] or new["hybrid_search_enabled"] is not True:
                 raise RetrievalConfigError("Promotion 修改了非允許的發布設定。")
         elif name == ".env.example":
-            old = git(root, "show", f"{commit}:{name}").decode()
-            new = (root / name).read_text(encoding="utf-8")
-            if old.replace("HYBRID_SEARCH_ENABLED=false", "HYBRID_SEARCH_ENABLED=true") != new:
+            old = git(root, "show", f"{commit}:{name}").decode().splitlines()
+            new = (root / name).read_text(encoding="utf-8").splitlines()
+            expected = ["HYBRID_SEARCH_ENABLED=true" if line == "HYBRID_SEARCH_ENABLED=false" else line
+                        for line in old]
+            if old.count("HYBRID_SEARCH_ENABLED=false") != 1 or expected != new:
                 raise RetrievalConfigError("Promotion 修改了其他環境設定。")
         elif name == manifest_path or name == result_relative:
             continue
