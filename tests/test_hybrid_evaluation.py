@@ -4,7 +4,7 @@ from pathlib import Path
 import json
 import pytest
 
-from src.rag.acceptance import config_id, run_id, safe_path, write_result
+from src.rag.acceptance import config_id, run_id, repository_module_name, safe_path, write_result
 from src.rag.hybrid_evaluation import exact_metrics, quality_gate, fraction_json, percentile, gold_matches
 from src.rag.retrieval_errors import RetrievalConfigError
 from langchain_core.documents import Document
@@ -43,6 +43,13 @@ def test_config_jcs_and_non_overwriting_result(tmp_path):
     write_result(result, {"status": "ERROR"})
     with pytest.raises(FileExistsError): write_result(result, {})
     with pytest.raises(RetrievalConfigError): safe_path(tmp_path, "../outside")
+
+
+def test_repository_module_name_does_not_resolve_third_party_relative_paths(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "_ops.py").write_text("", encoding="utf-8")
+    assert repository_module_name(tmp_path, "_ops.py") is None
+    assert repository_module_name(tmp_path, tmp_path / "_ops.py") == "_ops.py"
 
 
 def test_excel_gold_range_contains_answer_rows():

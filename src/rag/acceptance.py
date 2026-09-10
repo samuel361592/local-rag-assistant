@@ -80,6 +80,20 @@ def safe_path(root, relative):
     return path
 
 
+def repository_module_name(root, module_file):
+    """Return an imported repository file without guessing from relative paths."""
+    if not module_file:
+        return None
+    path = Path(module_file)
+    if not path.is_absolute() or not path.is_file():
+        return None
+    resolved = path.resolve()
+    repository = Path(root).resolve()
+    if not resolved.is_relative_to(repository):
+        return None
+    return resolved.relative_to(repository).as_posix()
+
+
 def fingerprint(root, dataset_path, config_path, config, dataset, digests):
     tracked = git(root, "ls-files", "-z").decode().split("\0")
     names = {p for p in tracked if p.startswith("src/") and p.endswith(".py")}
@@ -119,11 +133,9 @@ def worktree_check(root, commit, fingerprint_obj, dataset):
         if name.startswith(("src/", "evaluation/")) or name == "scripts/evaluate_retrieval.py":
             raise RetrievalConfigError(f"Acceptance 工作目錄不乾淨：{name}")
     for module in list(sys.modules.values()):
-        file = getattr(module, "__file__", None)
-        if file and Path(file).resolve().is_relative_to(root.resolve()):
-            name = Path(file).resolve().relative_to(root.resolve()).as_posix()
-            if name.endswith((".py", ".pyc")) and name not in fingerprint_obj["files"]:
-                raise RetrievalConfigError(f"INVALID_IMPORT_SCOPE: {name}")
+        name = repository_module_name(root, getattr(module, "__file__", None))
+        if name and name.endswith((".py", ".pyc")) and name not in fingerprint_obj["files"]:
+            raise RetrievalConfigError(f"INVALID_IMPORT_SCOPE: {name}")
     for name, checksum in sources.items():
         if hash_file(root / name) != checksum:
             raise RetrievalConfigError(f"語料雜湊不符：{name}")
