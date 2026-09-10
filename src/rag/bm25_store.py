@@ -135,7 +135,13 @@ class BM25Store:
             raise RetrievalConfigError("不可建立零 Chunk 知識庫。")
         if not all(isfinite(v) for v in (k1, b, epsilon)) or k1 <= 0 or not 0 <= b <= 1 or epsilon < 0:
             raise RetrievalConfigError("BM25 參數不合法。")
-        tokenized = [(doc, tokenize_for_bm25(doc.page_content)) for doc in documents]
+        tokenized = []
+        overflow_count = 0
+        for doc in documents:
+            normalized = re.sub(r"\s+", " ", unicodedata.normalize("NFKC", doc.page_content))
+            stats = {"identifier_overflow_count": 0}
+            tokenized.append((doc, _tokenize(normalized, stats=stats)))
+            overflow_count += stats["identifier_overflow_count"]
         searchable = [(doc, tokens) for doc, tokens in tokenized if tokens]
         store = cls() if searchable else EmptyBM25Store()
         store.source_document_count = len(documents)
@@ -143,6 +149,10 @@ class BM25Store:
         store.documents = list(documents)
         store.searchable = [doc for doc, _ in searchable]
         store.status = "ready" if searchable else "empty_no_tokens"
+        store.identifier_overflow_count = overflow_count
+        store.k1, store.b, store.epsilon = k1, b, epsilon
+        store.package = "rank-bm25"
+        store.package_version = "0.2.2"
         store.index = None
         if searchable:
             from rank_bm25 import BM25Okapi

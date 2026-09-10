@@ -21,6 +21,10 @@ def runtime_verification_status(settings):
             actual = getattr(settings, key)
             if key in {"embedding_model", "chat_model"}:
                 actual = actual if ":" in actual else actual + ":latest"
+            elif key == "reranker_device" and actual == "auto":
+                import torch
+                actual = "cuda:0" if torch.cuda.is_available() else "cpu"
+                expected = config["reranker_inference"]["device"]
             if actual != expected:
                 return "custom_unverified"
         inference = config["reranker_inference"]

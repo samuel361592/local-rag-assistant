@@ -46,12 +46,14 @@ def commit_knowledge_base(
     }
     replacement["chunk_registry"] = registry
     metrics.update(bm25_source_document_count=None, bm25_searchable_document_count=None,
-                   bm25_excluded_empty_token_count=None, bm25_status="disabled")
+                   bm25_excluded_empty_token_count=None, bm25_identifier_overflow_count=None,
+                   bm25_status="disabled")
     if bm25 is not None:
         replacement["bm25_store"] = bm25
         metrics.update(bm25_source_document_count=bm25.source_document_count,
                        bm25_searchable_document_count=bm25.searchable_document_count,
                        bm25_excluded_empty_token_count=bm25.source_document_count-bm25.searchable_document_count,
+                       bm25_identifier_overflow_count=bm25.identifier_overflow_count,
                        bm25_status=bm25.status)
     transactional_commit(state, replacement)
 

@@ -4,9 +4,11 @@ from pathlib import Path
 import json
 import pytest
 
-from src.rag.acceptance import config_id, run_id, repository_module_name, safe_path, write_result
+from src.rag.acceptance import (config_id, run_id, repository_module_name, safe_path,
+                                validate_release_manifest, write_result)
 from src.rag.hybrid_evaluation import exact_metrics, quality_gate, fraction_json, percentile, gold_matches
 from src.rag.retrieval_errors import RetrievalConfigError
+from src.rag.hybrid_cli import validate_dataset, validate_pipeline_config
 from langchain_core.documents import Document
 
 
@@ -45,10 +47,28 @@ def test_config_jcs_and_non_overwriting_result(tmp_path):
     with pytest.raises(RetrievalConfigError): safe_path(tmp_path, "../outside")
 
 
+def test_release_manifest_schema_and_cross_field_identity_are_strict():
+    commit = "a" * 40
+    cid = "b" * 64
+    manifest = {"dataset_version": "hybrid-eval-v1", "config_id": cid,
+        "run_id": f"20260910T010203123456Z_{commit[:12]}_{cid[:12]}",
+        "evaluated_commit": commit, "pipeline_fingerprint": "c" * 64,
+        "decision_status": "PASSED", "verified_at": "2026-09-10T01:02:03.123456Z"}
+    assert validate_release_manifest(manifest) is manifest
+    for key, value in (("decision_status", "FAILED"), ("run_id", "wrong"),
+                       ("verified_at", "not-a-timeZ")):
+        invalid = {**manifest, key: value}
+        with pytest.raises(RetrievalConfigError):
+            validate_release_manifest(invalid)
+    with pytest.raises(RetrievalConfigError):
+        validate_release_manifest({**manifest, "extra": True})
+
+
 def test_repository_module_name_does_not_resolve_third_party_relative_paths(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "_ops.py").write_text("", encoding="utf-8")
     assert repository_module_name(tmp_path, "_ops.py") is None
+    (tmp_path / "_ops.py").write_text("", encoding="utf-8")
+    assert repository_module_name(tmp_path, "_ops.py") == "_ops.py"
     assert repository_module_name(tmp_path, tmp_path / "_ops.py") == "_ops.py"
 
 
@@ -76,6 +96,22 @@ def test_versioned_dataset_has_fixed_categories_and_source_hashes():
         path = root / source["path"]
         if path.is_file():
             assert hash_file(path) == source["sha256"]
+
+
+def test_versioned_config_and_dataset_pass_strict_schema_validation():
+    root = Path(__file__).resolve().parents[1]
+    config = json.loads((root / "evaluation/config.hybrid-v6.json").read_text(encoding="utf-8"))
+    dataset = json.loads((root / "evaluation/dataset.hybrid-v1.json").read_text(encoding="utf-8"))
+    validate_pipeline_config(config)
+    validate_dataset(dataset)
+    invalid = deepcopy(config)
+    invalid["unexpected"] = True
+    with pytest.raises(RetrievalConfigError):
+        validate_pipeline_config(invalid)
+    invalid = deepcopy(config)
+    invalid["reranker_inference"]["batch_size"] = 0
+    with pytest.raises(RetrievalConfigError):
+        validate_pipeline_config(invalid)
 
 
 def test_four_groups_share_computation_but_never_cache_between_trials():

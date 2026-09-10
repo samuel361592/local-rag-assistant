@@ -393,8 +393,10 @@ BM25 沒有有效詞彙時允許建庫並顯示警告。正式查詢的可恢復
 共 50 題。執行四組比較、一次暖機及五次 Trial：
 
 ```powershell
-.venv/Scripts/python.exe -B scripts/evaluate_retrieval.py --hybrid --run-purpose tuning --cache-root C:/Users/dsc/.cache
+.venv/Scripts/python.exe -B scripts/evaluate_retrieval.py --hybrid --config evaluation/config.hybrid-v6.json --run-purpose tuning --cache-root C:/Users/dsc/.cache
 ```
+
+`config.hybrid-v6.json` 是與正式應用有效設定一致的候選設定，完整記錄解析、模型、BM25 與 Reranker 推論參數。
 
 `acceptance` 使用相同命令，但必須在已提交且乾淨的 checkout、Repository 外的隔離 Python
 環境執行，且實際依賴完全符合 Config 指定的環境 Manifest。模型、FAISS 衍生快取放在外部

@@ -60,7 +60,7 @@ def _is_memory_error(error: BaseException) -> bool:
 
 @lru_cache(maxsize=None)
 def create_reranker(model_name: str, use_fp16: bool, *, device: str | None = None,
-                    batch_size: int = 128, max_length: int = 512) -> Any:
+                    batch_size: int = 16, max_length: int = 512) -> Any:
     """延遲載入並快取 FlagReranker；不在模組 import 時載入模型。"""
 
     clean_model_name = model_name.strip()

@@ -85,7 +85,9 @@ def repository_module_name(root, module_file):
     if not module_file:
         return None
     path = Path(module_file)
-    if not path.is_absolute() or not path.is_file():
+    if not path.is_absolute():
+        path = Path(root) / path
+    if not path.is_file():
         return None
     resolved = path.resolve()
     repository = Path(root).resolve()
@@ -167,18 +169,69 @@ def write_result(path, result):
         stream.write("\n")
 
 
+def validate_release_manifest(manifest):
+    expected = {"dataset_version", "config_id", "run_id", "evaluated_commit",
+                "pipeline_fingerprint", "decision_status", "verified_at"}
+    if not isinstance(manifest, dict) or set(manifest) != expected:
+        raise RetrievalConfigError("發布 Manifest 欄位不完整或包含未知欄位。")
+    if manifest["dataset_version"] != "hybrid-eval-v1":
+        raise RetrievalConfigError("發布 Manifest Dataset version 不合法。")
+    if (not isinstance(manifest["config_id"], str)
+            or not re.fullmatch(r"[0-9a-f]{64}", manifest["config_id"])
+            or not isinstance(manifest["pipeline_fingerprint"], str)
+            or not re.fullmatch(r"[0-9a-f]{64}", manifest["pipeline_fingerprint"])
+            or not isinstance(manifest["evaluated_commit"], str)
+            or not re.fullmatch(r"[0-9a-f]{40}", manifest["evaluated_commit"])):
+        raise RetrievalConfigError("發布 Manifest 雜湊或 commit 格式不合法。")
+    run_pattern = (r"[0-9]{8}T[0-9]{12}Z_" + manifest["evaluated_commit"][:12]
+                   + "_" + manifest["config_id"][:12])
+    if not isinstance(manifest["run_id"], str) or not re.fullmatch(run_pattern, manifest["run_id"]):
+        raise RetrievalConfigError("發布 Manifest run_id 格式或身分不一致。")
+    if manifest["decision_status"] != "PASSED":
+        raise RetrievalConfigError("只有 PASSED Acceptance 可以發布。")
+    if not isinstance(manifest["verified_at"], str) or not manifest["verified_at"].endswith("Z"):
+        raise RetrievalConfigError("發布 Manifest verified_at 必須是 UTC 時間。")
+    try:
+        datetime.fromisoformat(manifest["verified_at"].removesuffix("Z") + "+00:00")
+    except ValueError as exc:
+        raise RetrievalConfigError("發布 Manifest verified_at 格式不合法。") from exc
+    return manifest
+
+
+def _require_head_blob(root, relative):
+    path = safe_path(root, relative)
+    try:
+        expected = git(root, "show", f"HEAD:{relative}")
+    except subprocess.CalledProcessError as exc:
+        raise RetrievalConfigError(f"發布檔案尚未提交：{relative}") from exc
+    if path.read_bytes() != expected:
+        raise RetrievalConfigError(f"發布檔案與 HEAD 不一致：{relative}")
+    return path
+
+
 def verify_promotion(root, manifest_path="evaluation/releases/hybrid-default.json"):
     """Fail closed; only a verified acceptance can authorize a release default."""
-    manifest = json.loads((root / manifest_path).read_text(encoding="utf-8"))
+    manifest_file = _require_head_blob(root, manifest_path)
+    manifest = validate_release_manifest(json.loads(manifest_file.read_text(encoding="utf-8")))
     commit = manifest["evaluated_commit"]
     subprocess.run(["git", "-C", str(root), "merge-base", "--is-ancestor", commit, "HEAD"], check=True)
-    result_path = root / "evaluation/results" / manifest["dataset_version"] / manifest["config_id"] / (manifest["run_id"] + ".json")
+    result_relative = (f"evaluation/results/{manifest['dataset_version']}/{manifest['config_id']}/"
+                       f"{manifest['run_id']}.json")
+    result_path = _require_head_blob(root, result_relative)
     result = json.loads(result_path.read_text(encoding="utf-8"))
+    fingerprint_manifest = result.get("fingerprint_manifest")
     if (result["run_purpose"] != "acceptance" or result["gate"]["status"] != "PASSED"
             or result["evaluated_commit"] != commit
-            or result["pipeline_fingerprint"] != manifest["pipeline_fingerprint"]):
+            or result["pipeline_fingerprint"] != manifest["pipeline_fingerprint"]
+            or result["dataset_version"] != manifest["dataset_version"]
+            or result["config_id"] != manifest["config_id"]
+            or result["run_id"] != manifest["run_id"]
+            or config_id(result["config"]) != manifest["config_id"]
+            or not isinstance(fingerprint_manifest, dict)
+            or fingerprint_manifest.get("schema") != "pipeline-fingerprint-v2"
+            or config_id(fingerprint_manifest) != manifest["pipeline_fingerprint"]):
         raise RetrievalConfigError("發布 Manifest 沒有有效 Acceptance。")
-    for name, checksum in result["fingerprint_manifest"]["files"].items():
+    for name, checksum in fingerprint_manifest["files"].items():
         if hash_file(safe_path(root, name)) != checksum:
             raise RetrievalConfigError("STALE_ACCEPTANCE")
     changed = git(root, "diff", "--name-only", commit, "HEAD").decode().splitlines()
@@ -193,10 +246,16 @@ def verify_promotion(root, manifest_path="evaluation/releases/hybrid-default.jso
             new = (root / name).read_text(encoding="utf-8")
             if old.replace("HYBRID_SEARCH_ENABLED=false", "HYBRID_SEARCH_ENABLED=true") != new:
                 raise RetrievalConfigError("Promotion 修改了其他環境設定。")
-        elif name == manifest_path or (root / name) == result_path:
+        elif name == manifest_path or name == result_relative:
             continue
         elif name == "README.md" or name.startswith("docs/") and name.endswith(".md"):
             continue
         else:
             raise RetrievalConfigError(f"STALE_ACCEPTANCE: {name}")
+    release = json.loads(_require_head_blob(root, "src/rag/release_defaults.json").read_text(encoding="utf-8"))
+    if set(release) != {"schema_version", "hybrid_search_enabled"} or release["hybrid_search_enabled"] is not True:
+        raise RetrievalConfigError("發布預設尚未啟用 Hybrid。")
+    env_lines = _require_head_blob(root, ".env.example").read_text(encoding="utf-8").splitlines()
+    if "HYBRID_SEARCH_ENABLED=true" not in env_lines or "HYBRID_SEARCH_ENABLED=false" in env_lines:
+        raise RetrievalConfigError(".env.example 與 Hybrid 發布預設不一致。")
     return manifest

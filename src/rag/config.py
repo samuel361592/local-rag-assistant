@@ -15,6 +15,16 @@ from dotenv import load_dotenv
 PROJECT_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
 
 
+def validate_release_defaults(value: object) -> dict[str, object]:
+    if not isinstance(value, dict) or set(value) != {"schema_version", "hybrid_search_enabled"}:
+        raise RetrievalConfigError("release_defaults.json 欄位不完整或包含未知欄位。")
+    if type(value["schema_version"]) is not int or value["schema_version"] != 1:
+        raise RetrievalConfigError("release_defaults.json schema_version 必須為 1。")
+    if type(value["hybrid_search_enabled"]) is not bool:
+        raise RetrievalConfigError("release_defaults.json hybrid_search_enabled 必須為布林值。")
+    return value
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     ollama_base_url: str = "http://localhost:11434"
@@ -34,7 +44,7 @@ class Settings:
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     reranker_use_fp16: bool = False
     reranker_device: str = "auto"
-    reranker_batch_size: int = 128
+    reranker_batch_size: int = 16
     reranker_max_length: int = 512
     reranker_revision: str = "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
     reranker_weights_sha256: str = "d9e3e081faff1eefb84019509b2f5558fd74c1a05a2c7db22f74174fcedb5286"
@@ -144,7 +154,9 @@ def load_settings(
         override=override_env,
     )
     defaults = Settings()
-    release = json.loads(Path(__file__).with_name("release_defaults.json").read_text(encoding="utf-8"))
+    release = validate_release_defaults(json.loads(
+        Path(__file__).with_name("release_defaults.json").read_text(encoding="utf-8")
+    ))
     hybrid = _read_bool("HYBRID_SEARCH_ENABLED", release["hybrid_search_enabled"])
     hybrid_values = {}
     if hybrid:

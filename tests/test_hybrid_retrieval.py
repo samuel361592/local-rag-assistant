@@ -4,10 +4,10 @@ import pytest
 from langchain_core.documents import Document
 from src.rag.bm25_store import tokenize_for_bm25, BM25Store, EmptyBM25Store
 from src.rag.chunk_identity import assign_chunk_ids, build_registry, validate_candidates
-from src.rag.config import Settings, load_settings
+from src.rag.config import Settings, load_settings, validate_release_defaults
 from src.rag.hybrid_retriever import ranked_documents, reciprocal_rank_fusion
 from src.rag.retrieval_errors import (RetrievalInvariantError, BM25SearchError,
-    DenseRetrievalError, KnowledgeStateError, RerankerOutputError)
+    DenseRetrievalError, KnowledgeStateError, RerankerOutputError, RetrievalConfigError)
 from src.rag.rag_service import RagService
 from src.rag.knowledge_state import transactional_commit
 from src.rag.hybrid_evaluation import exact_metrics, quality_gate
@@ -38,6 +38,9 @@ def test_bm25_original_documents_and_empty():
     store = BM25Store.from_documents(docs)
     assert store.source_document_count == 5
     assert store.searchable_document_count == 4
+    assert (store.package, store.package_version, store.k1, store.b, store.epsilon) == (
+        "rank-bm25", "0.2.2", 1.5, 0.75, 0.25)
+    assert store.identifier_overflow_count == 0
     hit = store.search("fu038", 20)
     assert len(hit) == 1 and hit[0].document is next(d for d in docs if "FU038" in d.page_content)
     assert store.search("unseen", 20) == []
@@ -68,6 +71,22 @@ def test_disabled_settings_ignore_invalid_hybrid(monkeypatch, tmp_path):
     assert not load_settings(env_path=tmp_path / "missing.env").hybrid_search_enabled
     assert Settings().top_k == 8
     assert Settings(hybrid_search_enabled=True, bm25_b=0, bm25_epsilon=0)
+
+
+@pytest.mark.parametrize("value", [
+    {"schema_version": 1},
+    {"schema_version": 1, "hybrid_search_enabled": False, "extra": 1},
+    {"schema_version": "1", "hybrid_search_enabled": False},
+    {"schema_version": 1, "hybrid_search_enabled": "false"},
+])
+def test_release_defaults_schema_is_strict(value):
+    with pytest.raises(RetrievalConfigError):
+        validate_release_defaults(value)
+
+
+def test_release_defaults_valid_schema_and_cpu_safe_reranker_default():
+    assert validate_release_defaults({"schema_version": 1, "hybrid_search_enabled": False})
+    assert Settings().reranker_batch_size == 16
 
 
 def test_state_rollback():
