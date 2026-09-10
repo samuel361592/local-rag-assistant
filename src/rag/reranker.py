@@ -161,6 +161,72 @@ def _normalize_scores(raw_scores: Any) -> list[float]:
     return scores
 
 
+def compute_scores(
+    reranker: Any,
+    pairs: list[list[str]],
+    *,
+    normalize: bool = True,
+    batch_size: int | None = None,
+    max_length: int | None = None,
+) -> Any:
+    """Compute CPU scores once, avoiding FlagEmbedding's duplicate probe batch."""
+    if getattr(reranker, "target_devices", None) != ["cpu"] or not all(
+        hasattr(reranker, name) for name in ("model", "tokenizer", "get_detailed_inputs")
+    ):
+        kwargs = {"normalize": normalize}
+        if batch_size is not None:
+            kwargs["batch_size"] = batch_size
+        if max_length is not None:
+            kwargs["max_length"] = max_length
+        return reranker.compute_score(pairs, **kwargs)
+
+    import numpy as np
+    import torch
+    from FlagEmbedding.inference.reranker.encoder_only.base import sigmoid
+    from FlagEmbedding.utils.tokenizer_compat import pad_with_compat, prepare_for_model_compat
+
+    effective_batch_size = batch_size or reranker.batch_size
+    effective_max_length = max_length or reranker.max_length
+    query_max_length = reranker.query_max_length or effective_max_length * 3 // 4
+    detailed_pairs = reranker.get_detailed_inputs(pairs)
+    queries = [pair[0] for pair in detailed_pairs]
+    passages = [pair[1] for pair in detailed_pairs]
+    query_tokens = reranker.tokenizer(
+        queries, add_special_tokens=False, max_length=query_max_length, truncation=True
+    )["input_ids"]
+    passage_tokens = reranker.tokenizer(
+        passages, add_special_tokens=False, max_length=effective_max_length, truncation=True
+    )["input_ids"]
+    inputs = [
+        prepare_for_model_compat(
+            reranker.tokenizer,
+            query,
+            passage,
+            truncation="only_second",
+            max_length=effective_max_length,
+            padding=False,
+        )
+        for query, passage in zip(query_tokens, passage_tokens)
+    ]
+    order = np.argsort([-len(item["input_ids"]) for item in inputs])
+    sorted_inputs = [inputs[index] for index in order]
+    reranker.model.to("cpu")
+    reranker.model.eval()
+    sorted_scores: list[float] = []
+    with torch.no_grad():
+        for start in range(0, len(sorted_inputs), effective_batch_size):
+            encoded = pad_with_compat(
+                reranker.tokenizer,
+                sorted_inputs[start:start + effective_batch_size],
+                padding=True,
+                return_tensors="pt",
+            ).to("cpu")
+            scores = reranker.model(**encoded, return_dict=True).logits.view(-1).float()
+            sorted_scores.extend(scores.cpu().numpy().tolist())
+    restored = [sorted_scores[index] for index in np.argsort(order)]
+    return [sigmoid(score) for score in restored] if normalize else restored
+
+
 def rerank_documents(
     question: str,
     documents: Sequence[Document],
@@ -179,7 +245,7 @@ def rerank_documents(
 
     pairs = [[clean_question, document.page_content] for document in documents]
     try:
-        raw_scores = reranker.compute_score(pairs, normalize=True)
+        raw_scores = compute_scores(reranker, pairs, normalize=True)
     except (OSError, RuntimeError, MemoryError) as exc:
         detail = _error_detail(exc)
         if _is_memory_error(exc):

@@ -18,7 +18,7 @@ from .chunk_identity import build_registry
 from .config import Settings
 from .document_loader import process_uploaded_documents
 from .hybrid_evaluation import run_benchmark
-from .reranker import create_reranker, RERANKER_REVISION, RERANKER_WEIGHTS_SHA256
+from .reranker import compute_scores, create_reranker, RERANKER_REVISION, RERANKER_WEIGHTS_SHA256
 from .retrieval_errors import RetrievalConfigError
 from .vector_store import create_vector_store
 from .hybrid_cache import cached_vector_store
@@ -35,7 +35,7 @@ class ConfiguredReranker:
         self.ranker, self.parameters = ranker, parameters
 
     def compute_score(self, pairs, normalize):
-        return self.ranker.compute_score(pairs, normalize=self.parameters["normalize"],
+        return compute_scores(self.ranker, pairs, normalize=self.parameters["normalize"],
             batch_size=self.parameters["batch_size"], max_length=self.parameters["max_length"])
 
 
