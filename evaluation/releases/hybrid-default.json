@@ -1,0 +1,9 @@
+{
+  "dataset_version": "hybrid-eval-v1",
+  "config_id": "e217ebcfaf54b624a9f47acb3be4cc69508cb4bd9d48ae337435fc2abddd0214",
+  "run_id": "20261008T062103102111Z_2895c8cecf34_e217ebcfaf54",
+  "evaluated_commit": "2895c8cecf34e4983e57a570578c9a9d1fe5f3a9",
+  "pipeline_fingerprint": "383d1b351f0cb930009121ca056294a269a3cea759b14fc875141c67e52ce39f",
+  "decision_status": "PASSED",
+  "verified_at": "2026-10-08T09:48:05.076Z"
+}

@@ -91,6 +91,8 @@ def _run_rag_job(
     job: RagAnswerJob,
     vector_store: Any,
     settings: Settings,
+    bm25_store: Any | None = None,
+    chunk_registry: dict | None = None,
 ) -> None:
     """在背景執行問答；此函式不得呼叫任何 Streamlit API。"""
 
